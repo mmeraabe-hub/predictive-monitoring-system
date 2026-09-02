@@ -1,164 +1,420 @@
-indicator_page = Path(
-    "/content/predictive_monitoring_app/"
-    "pages/3_Indicator_Dashboard.py"
+import io
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
+from utils.data_utils import (
+    load_dashboard_data,
+    prepare_numeric_columns,
+    get_indicator_history
 )
 
-page_code = indicator_page.read_text(
-    encoding="utf-8"
+from utils.status_logic import (
+    classify_quarter_status,
+    classify_forecast_status,
+    status_icon
 )
 
-start_marker = (
-    "# --------------------------------------------------\n"
-    "# ACTUAL, TARGET, AND FORECAST TREND\n"
-    "# --------------------------------------------------"
+
+# --------------------------------------------------
+# PAGE CONFIGURATION
+# --------------------------------------------------
+
+st.set_page_config(
+    page_title="Indicator Dashboard",
+    page_icon="🎯",
+    layout="wide"
 )
 
-end_marker = (
-    "# --------------------------------------------------\n"
-    "# PERFORMANCE GAP VISUAL\n"
-    "# --------------------------------------------------"
+
+# --------------------------------------------------
+# PAGE STYLE
+# --------------------------------------------------
+
+st.markdown(
+    """
+    <style>
+    .page-title {
+        color: #1F4E78;
+        font-size: 2.1rem;
+        font-weight: 700;
+        margin-bottom: 0.1rem;
+    }
+
+    .page-subtitle {
+        color: #64748B;
+        font-size: 1rem;
+        margin-bottom: 1.2rem;
+    }
+
+    .profile-box {
+        background-color: #F6F9FC;
+        border-left: 5px solid #1F4E78;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .insight-card {
+        background-color: #F6F9FC;
+        border-left: 5px solid #4472C4;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 0.5rem;
+    }
+
+    .method-note {
+        background-color: #FFF8E1;
+        border-left: 5px solid #F9A825;
+        border-radius: 8px;
+        padding: 0.9rem;
+        margin-top: 0.8rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-if start_marker not in page_code:
-    raise ValueError(
-        "The beginning of the old trend section "
-        "was not found."
+
+st.markdown(
+    '<div class="page-title">'
+    'Indicator Performance Dashboard'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="page-subtitle">'
+    'Quarterly, annual, and life-of-project monitoring'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+
+# --------------------------------------------------
+# LOAD DATA
+# --------------------------------------------------
+
+try:
+
+    data, selected_sheet, available_sheets = (
+        load_dashboard_data()
     )
 
-if end_marker not in page_code:
-    raise ValueError(
-        "The end of the old trend section "
-        "was not found."
+except Exception as error:
+
+    st.error(
+        "The monitoring dataset could not be loaded."
     )
 
-before_section = page_code.split(
-    start_marker,
-    1
-)[0]
+    st.exception(error)
+    st.stop()
 
-after_section = page_code.split(
-    end_marker,
-    1
-)[1]
 
-new_trend_section = '''
+data = prepare_numeric_columns(data)
+
+
+required_columns = [
+    "IndicatorID",
+    "Project",
+    "IndicatorName",
+    "Year",
+    "Quarter",
+    "PeriodIndex",
+    "PeriodLabel",
+    "QuarterTarget",
+    "QuarterActual"
+]
+
+
+missing_columns = [
+    column
+    for column in required_columns
+    if column not in data.columns
+]
+
+
+if missing_columns:
+
+    st.error(
+        "Required columns are missing: "
+        + ", ".join(missing_columns)
+    )
+
+    st.stop()
+
+
 # --------------------------------------------------
-# THREE PERFORMANCE TREND CHARTS
+# SIDEBAR FILTERS
 # --------------------------------------------------
 
-st.divider()
+st.sidebar.header("Indicator Selection")
 
-st.subheader("Performance and Forecast Trend Analysis")
 
-st.caption(
-    "The following charts show how quarterly performance, "
-    "annual outlook, and life-of-project outlook have "
-    "changed up to the selected reporting period."
+project_options = sorted(
+    data["Project"]
+    .dropna()
+    .astype(str)
+    .unique()
 )
 
 
-# Use only records available up to the selected period
+if not project_options:
 
-trend_history = history.copy()
+    st.error(
+        "No projects are available in the dataset."
+    )
 
-trend_history = trend_history.sort_values(
-    "PeriodIndex"
-).reset_index(drop=True)
+    st.stop()
+
+
+selected_project = st.sidebar.selectbox(
+    "Project",
+    project_options
+)
+
+
+project_data = data[
+    data["Project"].astype(str)
+    == selected_project
+].copy()
+
+
+indicator_lookup = (
+    project_data[
+        [
+            "IndicatorID",
+            "IndicatorName"
+        ]
+    ]
+    .drop_duplicates(
+        subset=["IndicatorID"]
+    )
+    .sort_values("IndicatorName")
+)
+
+
+indicator_labels = {
+    (
+        str(row["IndicatorID"])
+        + " | "
+        + str(row["IndicatorName"])
+    ): row["IndicatorID"]
+
+    for _, row in indicator_lookup.iterrows()
+}
+
+
+if not indicator_labels:
+
+    st.error(
+        "No indicators are available for this project."
+    )
+
+    st.stop()
+
+
+selected_indicator_label = (
+    st.sidebar.selectbox(
+        "Indicator",
+        list(indicator_labels.keys())
+    )
+)
+
+
+selected_indicator_id = (
+    indicator_labels[
+        selected_indicator_label
+    ]
+)
+
+
+indicator_data = project_data[
+    project_data["IndicatorID"]
+    == selected_indicator_id
+].copy()
+
+
+available_years = sorted(
+    indicator_data["Year"]
+    .dropna()
+    .astype(int)
+    .unique()
+)
+
+
+if not available_years:
+
+    st.error(
+        "No project years are available for this indicator."
+    )
+
+    st.stop()
+
+
+selected_year = st.sidebar.selectbox(
+    "Reporting Year",
+    available_years,
+    index=len(available_years) - 1
+)
+
+
+available_quarters = sorted(
+    indicator_data.loc[
+        indicator_data["Year"] == selected_year,
+        "Quarter"
+    ]
+    .dropna()
+    .astype(int)
+    .unique()
+)
+
+
+if not available_quarters:
+
+    available_quarters = [1, 2, 3, 4]
+
+
+selected_quarter = st.sidebar.selectbox(
+    "Reporting Quarter",
+    available_quarters,
+    index=len(available_quarters) - 1
+)
+
+
+selected_period = (
+    ((int(selected_year) - 1) * 4)
+    + int(selected_quarter)
+)
+
+
+history = get_indicator_history(
+    data=data,
+    indicator_id=selected_indicator_id,
+    selected_period=selected_period
+)
+
+
+if history.empty:
+
+    st.warning(
+        "No observations are available for the selected "
+        "indicator and reporting period."
+    )
+
+    st.stop()
+
+
+history = (
+    history
+    .sort_values("PeriodIndex")
+    .reset_index(drop=True)
+)
+
+
+current_record = history.iloc[-1]
 
 
 # --------------------------------------------------
-# CHART 1: QUARTERLY ACTUAL VS TARGET
+# HELPER FUNCTIONS
 # --------------------------------------------------
 
-st.markdown("### 1. Quarterly Actual vs Target")
+def safe_number(value, decimals=1):
+
+    if pd.isna(value):
+        return "No Data"
+
+    return f"{value:,.{decimals}f}"
 
 
-quarter_chart = go.Figure()
+def safe_percentage(value):
+
+    if pd.isna(value):
+        return "No Data"
+
+    return f"{value * 100:,.1f}%"
 
 
-quarter_chart.add_trace(
-    go.Scatter(
-        x=trend_history["PeriodLabel"],
-        y=trend_history["QuarterTarget"],
-        mode="lines+markers",
-        name="Quarter Target",
-        line=dict(
-            color="#2E7D32",
-            width=3
-        ),
-        marker=dict(
-            size=8
+def progress_bar(value, label):
+
+    st.write(label)
+
+    if pd.isna(value):
+
+        st.caption("No data available.")
+        return
+
+    displayed_value = min(
+        max(float(value), 0.0),
+        1.0
+    )
+
+    st.progress(displayed_value)
+
+    st.caption(
+        safe_percentage(value)
+    )
+
+
+def gap_text(value, horizon):
+
+    if pd.isna(value):
+
+        return (
+            f"{horizon} progress gap cannot "
+            "be calculated."
         )
-    )
-)
 
+    gap_percentage = abs(value * 100)
 
-quarter_chart.add_trace(
-    go.Scatter(
-        x=trend_history["PeriodLabel"],
-        y=trend_history["QuarterActual"],
-        mode="lines+markers",
-        name="Quarter Actual",
-        line=dict(
-            color="#1F77B4",
-            width=3
-        ),
-        marker=dict(
-            size=8
+    if value > 0.02:
+
+        return (
+            f"{horizon} progress is "
+            f"{gap_percentage:,.1f}% ahead of the "
+            "expected time-based trajectory."
         )
-    )
-)
 
+    if value < -0.02:
 
-quarter_chart.add_vline(
-    x=len(trend_history) - 1,
-    line_width=2,
-    line_dash="dot",
-    line_color="#6B7280"
-)
-
-
-quarter_chart.update_layout(
-    xaxis_title="Project Reporting Period",
-    yaxis_title=str(
-        current_record.get(
-            "Unit",
-            "Indicator value"
+        return (
+            f"{horizon} progress is "
+            f"{gap_percentage:,.1f}% behind the "
+            "expected time-based trajectory."
         )
-    ),
-    legend_title="Series",
-    hovermode="x unified",
-    margin=dict(
-        l=20,
-        r=20,
-        t=20,
-        b=20
+
+    return (
+        f"{horizon} progress is broadly aligned with "
+        "the expected time-based trajectory."
     )
-)
 
 
-st.plotly_chart(
-    quarter_chart,
-    use_container_width=True
-)
+def dataframe_to_excel(dataframe):
 
+    output = io.BytesIO()
 
-st.caption(
-    "The blue line shows reported quarterly actuals. "
-    "The green line shows planned quarterly targets. "
-    "The vertical dotted line marks the selected "
-    "reporting period."
-)
+    with pd.ExcelWriter(
+        output,
+        engine="openpyxl"
+    ) as writer:
 
+        dataframe.to_excel(
+            writer,
+            sheet_name="Indicator_History",
+            index=False
+        )
 
-# --------------------------------------------------
-# SHARED FORECAST-INDEX CHART FUNCTION
-# --------------------------------------------------
+    output.seek(0)
+
+    return output.getvalue()
+
 
 def create_forecast_index_chart(
     dataframe,
     value_column,
-    chart_title,
+    line_name,
     line_color
 ):
 
@@ -170,356 +426,58 @@ def create_forecast_index_chart(
         ]
     ].copy()
 
-    chart_data = chart_data.dropna(
-        subset=[value_column]
+    chart_data[value_column] = pd.to_numeric(
+        chart_data[value_column],
+        errors="coerce"
     )
+
+    chart_data = (
+        chart_data
+        .replace(
+            [np.inf, -np.inf],
+            np.nan
+        )
+        .dropna(
+            subset=[value_column]
+        )
+        .sort_values("PeriodIndex")
+    )
+
 
     chart = go.Figure()
 
 
-    # Off Track background: below 80%
+    if chart_data.empty:
+
+        return chart, chart_data
+
+
+    maximum_value = chart_data[
+        value_column
+    ].max()
+
+
+    upper_limit = max(
+        1.20,
+        float(maximum_value) * 1.10
+    )
+
 
     chart.add_hrect(
         y0=0,
         y1=0.80,
         fillcolor="#FDECEC",
-        opacity=0.45,
+        opacity=0.50,
         line_width=0,
         annotation_text="Off Track",
         annotation_position="top left"
     )
 
 
-    # At Risk background: 80% to below 100%
-
     chart.add_hrect(
         y0=0.80,
         y1=1.00,
         fillcolor="#FFF8E1",
-        opacity=0.50,
+        opacity=0.55,
         line_width=0,
-        annotation_text="At Risk",
-        annotation_position="top left"
-    )
-
-
-    # On Track background: 100% and above
-
-    upper_limit = 1.20
-
-    if not chart_data.empty:
-
-        observed_maximum = (
-            chart_data[value_column]
-            .replace(
-                [np.inf, -np.inf],
-                np.nan
-            )
-            .dropna()
-            .max()
-        )
-
-        if not pd.isna(observed_maximum):
-
-            upper_limit = max(
-                1.20,
-                float(observed_maximum) * 1.10
-            )
-
-
-    chart.add_hrect(
-        y0=1.00,
-        y1=upper_limit,
-        fillcolor="#EFF8F0",
-        opacity=0.40,
-        line_width=0,
-        annotation_text="On Track",
-        annotation_position="top left"
-    )
-
-
-    chart.add_trace(
-        go.Scatter(
-            x=chart_data["PeriodLabel"],
-            y=chart_data[value_column],
-            mode="lines+markers",
-            name=chart_title,
-            line=dict(
-                color=line_color,
-                width=3
-            ),
-            marker=dict(
-                size=8
-            )
-        )
-    )
-
-
-    # 100% target line
-
-    chart.add_hline(
-        y=1.00,
-        line_width=2,
-        line_dash="dash",
-        line_color="#2E7D32",
-        annotation_text="100% target",
-        annotation_position="top right"
-    )
-
-
-    # 80% risk threshold
-
-    chart.add_hline(
-        y=0.80,
-        line_width=2,
-        line_dash="dot",
-        line_color="#C62828",
-        annotation_text="80% threshold",
-        annotation_position="bottom right"
-    )
-
-
-    chart.update_layout(
-        xaxis_title="Project Reporting Period",
-        yaxis_title="Forecast Achievement Index",
-        hovermode="x unified",
-        showlegend=False,
-        margin=dict(
-            l=20,
-            r=20,
-            t=25,
-            b=20
-        )
-    )
-
-
-    chart.update_yaxes(
-        tickformat=".0%",
-        range=[
-            0,
-            upper_limit
-        ]
-    )
-
-
-    return chart, chart_data
-
-
-# --------------------------------------------------
-# CHART 2: ANNUAL FORECAST INDEX TREND
-# --------------------------------------------------
-
-st.markdown("### 2. Annual Forecast Index Trend")
-
-
-if "AnnualForecastRatio" in trend_history.columns:
-
-    annual_forecast_chart, annual_chart_data = (
-        create_forecast_index_chart(
-            dataframe=trend_history,
-            value_column="AnnualForecastRatio",
-            chart_title="Annual Forecast Index",
-            line_color="#F28E2B"
-        )
-    )
-
-
-    if annual_chart_data.empty:
-
-        st.info(
-            "Annual forecast-index values are not "
-            "available for this indicator."
-        )
-
-    else:
-
-        st.plotly_chart(
-            annual_forecast_chart,
-            use_container_width=True
-        )
-
-
-        first_annual_value = (
-            annual_chart_data[
-                "AnnualForecastRatio"
-            ].iloc[0]
-        )
-
-        latest_annual_value = (
-            annual_chart_data[
-                "AnnualForecastRatio"
-            ].iloc[-1]
-        )
-
-        annual_change = (
-            latest_annual_value
-            - first_annual_value
-        )
-
-
-        st.caption(
-            "The annual forecast index estimates the "
-            "share of the annual target likely to be "
-            "achieved if the observed annual pace "
-            "continues."
-        )
-
-
-        if annual_change > 0.02:
-
-            st.success(
-                "Annual outlook improved by "
-                f"{annual_change * 100:,.1f} percentage "
-                "points across the displayed history."
-            )
-
-        elif annual_change < -0.02:
-
-            st.warning(
-                "Annual outlook declined by "
-                f"{abs(annual_change) * 100:,.1f} "
-                "percentage points across the displayed "
-                "history."
-            )
-
-        else:
-
-            st.info(
-                "Annual outlook remained broadly stable "
-                "across the displayed history."
-            )
-
-else:
-
-    st.info(
-        "AnnualForecastRatio is not available "
-        "in the monitoring dataset."
-    )
-
-
-# --------------------------------------------------
-# CHART 3: LOP FORECAST INDEX TREND
-# --------------------------------------------------
-
-st.markdown(
-    "### 3. Life-of-Project Forecast Index Trend"
-)
-
-
-if "LoPForecastRatio" in trend_history.columns:
-
-    lop_forecast_chart, lop_chart_data = (
-        create_forecast_index_chart(
-            dataframe=trend_history,
-            value_column="LoPForecastRatio",
-            chart_title="LoP Forecast Index",
-            line_color="#7030A0"
-        )
-    )
-
-
-    if lop_chart_data.empty:
-
-        st.info(
-            "LoP forecast-index values are not "
-            "available for this indicator."
-        )
-
-    else:
-
-        st.plotly_chart(
-            lop_forecast_chart,
-            use_container_width=True
-        )
-
-
-        first_lop_value = (
-            lop_chart_data[
-                "LoPForecastRatio"
-            ].iloc[0]
-        )
-
-        latest_lop_value = (
-            lop_chart_data[
-                "LoPForecastRatio"
-            ].iloc[-1]
-        )
-
-        lop_change = (
-            latest_lop_value
-            - first_lop_value
-        )
-
-
-        st.caption(
-            "The LoP forecast index estimates the share "
-            "of the life-of-project target likely to be "
-            "achieved if the observed cumulative pace "
-            "continues."
-        )
-
-
-        if lop_change > 0.02:
-
-            st.success(
-                "Life-of-project outlook improved by "
-                f"{lop_change * 100:,.1f} percentage "
-                "points across the displayed history."
-            )
-
-        elif lop_change < -0.02:
-
-            st.warning(
-                "Life-of-project outlook declined by "
-                f"{abs(lop_change) * 100:,.1f} "
-                "percentage points across the displayed "
-                "history."
-            )
-
-        else:
-
-            st.info(
-                "Life-of-project outlook remained "
-                "broadly stable across the displayed "
-                "history."
-            )
-
-else:
-
-    st.info(
-        "LoPForecastRatio is not available "
-        "in the monitoring dataset."
-    )
-
-
-st.markdown(
-    """
-    <div class="method-note">
-    <strong>How to read the forecast-index charts:</strong><br>
-    A value of 100% indicates the current pace is aligned
-    with full target achievement. Values from 80% to below
-    100% are classified as At Risk. Values below 80% are
-    classified as Off Track. These are pace-based
-    monitoring indices and require contextual review.
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-'''
-
-updated_code = (
-    before_section
-    + new_trend_section
-    + end_marker
-    + after_section
-)
-
-indicator_page.write_text(
-    updated_code,
-    encoding="utf-8"
-)
-
-print(
-    "Indicator Dashboard trend section replaced."
-)
+        annotation_text="At Risk
