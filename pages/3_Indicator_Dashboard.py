@@ -1,5 +1,3 @@
-from pathlib import Path
-
 indicator_page = Path(
     "/content/predictive_monitoring_app/"
     "pages/3_Indicator_Dashboard.py"
