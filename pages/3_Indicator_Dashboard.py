@@ -662,71 +662,51 @@ with lop_column:
 # ACTUAL, TARGET, AND FORECAST TREND
 # --------------------------------------------------
 
+# --------------------------------------------------
+# PERFORMANCE TREND ANALYSIS
+# --------------------------------------------------
+
 st.divider()
 
 st.subheader(
-    "Actual, Target, and Forecast Trend"
+    "Performance Trend Analysis"
 )
 
-
-all_indicator_data = (
-    indicator_data
+history_trend = (
+    history
     .sort_values("PeriodIndex")
     .copy()
 )
 
+# ==================================
+# CHART 1
+# ==================================
 
-current_ratio = current_record.get(
-    "AR_Original",
-    current_record.get(
-        "AchievementRatio",
-        np.nan
-    )
+st.markdown(
+    "### 1. Quarterly Actual vs Target"
 )
 
+chart1 = go.Figure()
 
-all_indicator_data[
-    "PaceForecastActual"
-] = np.nan
-
-
-future_mask = (
-    all_indicator_data["PeriodIndex"]
-    > selected_period
-)
-
-
-forecast_mask = (
-    future_mask
-    & all_indicator_data[
-        "QuarterTarget"
-    ].notna()
-)
-
-
-if not pd.isna(current_ratio):
-
-    all_indicator_data.loc[
-        forecast_mask,
-        "PaceForecastActual"
-    ] = (
-        current_ratio
-        * all_indicator_data.loc[
-            forecast_mask,
-            "QuarterTarget"
-        ]
-    )
-
-
-trend_chart = go.Figure()
-
-
-trend_chart.add_trace(
+chart1.add_trace(
     go.Scatter(
-        x=history["PeriodLabel"],
-        y=history["QuarterActual"],
+        x=history_trend["PeriodLabel"],
+        y=history_trend["QuarterTarget"],
         mode="lines+markers",
-        name="Actual",
+        name="Quarter Target",
+        line=dict(
+            color="#2E7D32",
+            width=3
+        )
+    )
+)
+
+chart1.add_trace(
+    go.Scatter(
+        x=history_trend["PeriodLabel"],
+        y=history_trend["QuarterActual"],
+        mode="lines+markers",
+        name="Quarter Actual",
         line=dict(
             color="#1F77B4",
             width=3
@@ -734,77 +714,131 @@ trend_chart.add_trace(
     )
 )
 
-
-trend_chart.add_trace(
-    go.Scatter(
-        x=all_indicator_data["PeriodLabel"],
-        y=all_indicator_data["QuarterTarget"],
-        mode="lines+markers",
-        name="Target",
-        line=dict(
-            color="#2E7D32",
-            width=2
-        )
-    )
+chart1.update_layout(
+    xaxis_title="Reporting Period",
+    yaxis_title="Indicator Value",
+    hovermode="x unified"
 )
-
-
-forecast_history = all_indicator_data[
-    all_indicator_data[
-        "PaceForecastActual"
-    ].notna()
-].copy()
-
-
-if not forecast_history.empty:
-
-    trend_chart.add_trace(
-        go.Scatter(
-            x=forecast_history["PeriodLabel"],
-            y=forecast_history[
-                "PaceForecastActual"
-            ],
-            mode="lines+markers",
-            name="Pace-Based Forecast",
-            line=dict(
-                color="#F28E2B",
-                width=3,
-                dash="dash"
-            )
-        )
-    )
-
-
-trend_chart.update_layout(
-    xaxis_title="Project Reporting Period",
-    yaxis_title=str(
-        current_record.get(
-            "Unit",
-            "Indicator Value"
-        )
-    ),
-    hovermode="x unified",
-    legend_title="Series",
-    margin=dict(
-        l=20,
-        r=20,
-        t=20,
-        b=20
-    )
-)
-
 
 st.plotly_chart(
-    trend_chart,
+    chart1,
     use_container_width=True
 )
 
+st.caption(
+    "Blue = Actual. Green = Target."
+)
+
+# ==================================
+# CHART 2
+# ==================================
+
+st.markdown(
+    "### 2. Annual Forecast Index Trend"
+)
+
+annual_chart = go.Figure()
+
+annual_chart.add_trace(
+    go.Scatter(
+        x=history_trend["PeriodLabel"],
+        y=history_trend[
+            "AnnualForecastRatio"
+        ],
+        mode="lines+markers",
+        name="Annual Forecast",
+        line=dict(
+            color="#F28E2B",
+            width=3
+        )
+    )
+)
+
+annual_chart.add_hline(
+    y=1.0,
+    line_dash="dash",
+    line_color="green"
+)
+
+annual_chart.add_hline(
+    y=0.8,
+    line_dash="dot",
+    line_color="red"
+)
+
+annual_chart.update_layout(
+    xaxis_title="Reporting Period",
+    yaxis_title="Forecast Index",
+    hovermode="x unified"
+)
+
+annual_chart.update_yaxes(
+    tickformat=".0%"
+)
+
+st.plotly_chart(
+    annual_chart,
+    use_container_width=True
+)
 
 st.caption(
-    "Blue shows reported actuals, green shows quarterly "
-    "targets, and orange shows the pace-based forecast. "
-    "The forecast applies the current original achievement "
-    "ratio to future quarterly targets."
+    "Annual forecast outlook trend."
+)
+
+# ==================================
+# CHART 3
+# ==================================
+
+st.markdown(
+    "### 3. Life-of-Project Forecast Index Trend"
+)
+
+lop_chart = go.Figure()
+
+lop_chart.add_trace(
+    go.Scatter(
+        x=history_trend["PeriodLabel"],
+        y=history_trend[
+            "LoPForecastRatio"
+        ],
+        mode="lines+markers",
+        name="LoP Forecast",
+        line=dict(
+            color="#7030A0",
+            width=3
+        )
+    )
+)
+
+lop_chart.add_hline(
+    y=1.0,
+    line_dash="dash",
+    line_color="green"
+)
+
+lop_chart.add_hline(
+    y=0.8,
+    line_dash="dot",
+    line_color="red"
+)
+
+lop_chart.update_layout(
+    xaxis_title="Reporting Period",
+    yaxis_title="Forecast Index",
+    hovermode="x unified"
+)
+
+lop_chart.update_yaxes(
+    tickformat=".0%"
+)
+
+st.plotly_chart(
+    lop_chart,
+    use_container_width=True
+)
+
+st.caption(
+    "Life-of-project forecast outlook trend."
 )
 
 
