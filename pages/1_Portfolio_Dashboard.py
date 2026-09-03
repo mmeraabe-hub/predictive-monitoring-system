@@ -344,6 +344,9 @@ st.dataframe(
 # ==================================================
 # PORTFOLIO EARLY WARNING
 # ==================================================
+# ==================================================
+# PORTFOLIO EARLY WARNING
+# ==================================================
 
 st.divider()
 
@@ -375,4 +378,12 @@ portfolio_warning["LoPForecast"] = (
 
 portfolio_warning["GapToTarget"] = (
     portfolio_warning["LoPForecast"] - 100
-).round
+).round(1)
+
+st.dataframe(
+    portfolio_warning.sort_values(
+        "GapToTarget"
+    ),
+    hide_index=True,
+    use_container_width=True
+)
