@@ -51,44 +51,154 @@ if missing_columns:
     + ", ".join(missing_columns)
 )
     st.stop()
-st.sidebar.header("Reporting Period")
+# ==================================================
+# EXECUTIVE FILTERS
+# ==================================================
+
+st.sidebar.header("Executive Filters")
+
+st.sidebar.caption(
+    "Leave a filter empty to include all available values."
+)
+
+available_projects = sorted(
+    data["Project"]
+    .dropna()
+    .astype(str)
+    .unique()
+    .tolist()
+)
+
 available_years = sorted(
-    data["Year"].dropna().astype(int).unique()
+    data["Year"]
+    .dropna()
+    .astype(int)
+    .unique()
+    .tolist()
 )
-selected_year = st.sidebar.selectbox(
-    "Project Year",
+
+available_quarters = sorted(
+    data["Quarter"]
+    .dropna()
+    .astype(int)
+    .unique()
+    .tolist()
+)
+
+selected_projects = st.sidebar.multiselect(
+    "Projects",
+    available_projects,
+    default=[]
+)
+
+selected_years = st.sidebar.multiselect(
+    "Years",
     available_years,
-    index=len(available_years) - 1
+    default=[]
 )
-selected_quarter = st.sidebar.selectbox(
-    "Quarter",
-    [1, 2, 3, 4],
-    index=3
+
+selected_quarters = st.sidebar.multiselect(
+    "Quarters",
+    available_quarters,
+    default=[]
 )
-snapshot = create_period_snapshot(
-    data=data,
-    year=selected_year,
-    quarter=selected_quarter
+
+filtered_data = data.copy()
+
+if selected_projects:
+
+    filtered_data = filtered_data[
+        filtered_data["Project"]
+        .astype(str)
+        .isin(selected_projects)
+    ]
+
+if selected_years:
+
+    filtered_data = filtered_data[
+        filtered_data["Year"]
+        .astype(int)
+        .isin(selected_years)
+    ]
+
+if selected_quarters:
+
+    filtered_data = filtered_data[
+        filtered_data["Quarter"]
+        .astype(int)
+        .isin(selected_quarters)
+    ]
+
+if filtered_data.empty:
+
+    st.warning(
+        "No records match the selected filters."
+    )
+    st.stop()
+
+snapshot = (
+    filtered_data
+    .sort_values(
+        ["IndicatorID", "PeriodIndex"]
+    )
+    .groupby(
+        "IndicatorID",
+        as_index=False
+    )
+    .tail(1)
+    .reset_index(drop=True)
 )
-if "AchievementRatio" in snapshot.columns:
-    snapshot["QuarterStatus"] = snapshot.apply(
-        classify_quarter_status,
-        axis=1
+
+filter_summary = []
+
+if selected_projects:
+
+    filter_summary.append(
+        "Projects: "
+        + ", ".join(selected_projects)
     )
-if "AnnualForecastRatio" in snapshot.columns:
-    snapshot["AnnualStatus"] = (
-        snapshot["AnnualForecastRatio"]
-        .apply(classify_forecast_status)
+
+else:
+
+    filter_summary.append(
+        "Projects: All"
     )
-if "LoPForecastRatio" in snapshot.columns:
-    snapshot["LoPStatus"] = (
-        snapshot["LoPForecastRatio"]
-        .apply(classify_forecast_status)
+
+if selected_years:
+
+    filter_summary.append(
+        "Years: "
+        + ", ".join(
+            str(year)
+            for year in selected_years
+        )
     )
+
+else:
+
+    filter_summary.append(
+        "Years: All"
+    )
+
+if selected_quarters:
+
+    filter_summary.append(
+        "Quarters: "
+        + ", ".join(
+            f"Q{quarter}"
+            for quarter in selected_quarters
+        )
+    )
+
+else:
+
+    filter_summary.append(
+        "Quarters: All"
+    )
+
 st.info(
-    f"Reporting snapshot: Year {selected_year}, "
-    f"Quarter {selected_quarter}. "
-    f"Loaded from sheet: {selected_sheet}"
+    " | ".join(filter_summary)
+    + f" | Sheet: {selected_sheet}"
 )
 projects_count = snapshot["Project"].nunique()
 indicators_count = snapshot["IndicatorID"].nunique()
