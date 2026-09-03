@@ -465,3 +465,51 @@ else:
         "Larger bars indicate indicators that are forecasted "
         "to miss their target by a bigger margin."
     )
+    # ==================================================
+# SECTION 4: COMBINED PROJECT PERFORMANCE GRAPH
+# ==================================================
+
+st.divider()
+
+st.header("📊 Actual vs Forecast vs Target")
+
+graph_data = pd.DataFrame(
+    {
+        "Assessment": [
+            "Annual",
+            "Annual",
+            "Annual",
+            "LoP",
+            "LoP",
+            "LoP",
+        ],
+        "Measure": [
+            "Actual",
+            "Forecast",
+            "Target",
+            "Actual",
+            "Forecast",
+            "Target",
+        ],
+        "Value": [
+            annual_actual * 100,
+            annual_forecast * 100,
+            100,
+            lop_actual * 100,
+            lop_forecast * 100,
+            100,
+        ],
+    }
+)
+
+st.bar_chart(
+    data=graph_data,
+    x="Assessment",
+    y="Value",
+    color="Measure"
+)
+
+st.caption(
+    "Compare current achievement, forecasted achievement, "
+    "and the target level for Annual and Life-of-Project performance."
+)
