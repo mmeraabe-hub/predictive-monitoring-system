@@ -413,6 +413,9 @@ st.bar_chart(
 # ==================================================
 # EXECUTIVE PORTFOLIO RISK HEATMAP
 # ==================================================
+# ==================================================
+# EXECUTIVE PORTFOLIO RISK HEATMAP
+# ==================================================
 
 st.divider()
 
@@ -452,8 +455,3 @@ portfolio_heatmap["Annual Status"] = (
 
 portfolio_heatmap["LoP Status"] = (
     portfolio_heatmap[
-
-st.caption(
-    "Projects are ranked by forecast gap to target. "
-    "More negative values indicate greater risk."
-)
