@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
 
 from utils.data_utils import (
     load_dashboard_data,
@@ -224,146 +225,289 @@ st.caption(
     "Risk classification uses the centralized thresholds "
     "defined in utils/risk_thresholds.py."
 )
+
+
 # ==================================================
-# SECTION 2: PROJECT EARLY WARNING ANALYSIS
-# ==================================================
-
-st.divider()
-
-st.header("📈 Project Early Warning Analysis")
-
-project_list = sorted(
-    snapshot["Project"]
-    .dropna()
-    .unique()
-    .tolist()
-)
-
-selected_ew_project = st.selectbox(
-    "Select Project for Early Warning Analysis",
-    project_list,
-    key="ew_project"
-)
-
-project_data = snapshot[
-    snapshot["Project"] == selected_ew_project
-].copy()
-
-annual_actual = project_data["AnnualProgress"].median()
-annual_forecast = project_data["AnnualForecastRatio"].median()
-
-lop_actual = project_data["LoPProgress"].median()
-lop_forecast = project_data["LoPForecastRatio"].median()
-
-annual_status = classify_risk(
-    annual_forecast,
-    "Annual"
-)
-
-lop_status = classify_risk(
-    lop_forecast,
-    "LoP"
-)
-
-col1, col2 = st.columns(2)
-
-with col1:
-
-    st.metric(
-        "Annual Actual Index",
-        f"{annual_actual:.1%}"
-    )
-
-    st.metric(
-        "Annual Forecast Index",
-        f"{annual_forecast:.1%}"
-    )
-
-    st.write(
-        f"Expected Annual Status: {annual_status}"
-    )
-
-with col2:
-
-    st.metric(
-        "LoP Actual Index",
-        f"{lop_actual:.1%}"
-    )
-
-    st.metric(
-        "LoP Forecast Index",
-        f"{lop_forecast:.1%}"
-    )
-
-    st.write(
-        f"Expected LoP Status: {lop_status}"
-    )
-    # ==================================================
-# SECTION 3: WHY IS THE PROJECT AT RISK?
+# SECTION 4: PROJECT PERFORMANCE TRAJECTORY
 # ==================================================
 
 st.divider()
 
-st.header("⭐ Why Is The Project At Risk?")
+st.header("📈 Project Actual vs AI Forecast vs Target")
 
-analysis_level = st.radio(
-    "Risk Driver Analysis Level",
-    ["Annual", "LoP"],
-    horizontal=True
+st.markdown(
+    "This visual compares the selected project's current "
+    "achievement with its AI forecast. The red dashed line "
+    "represents the 100% target benchmark."
 )
 
-if analysis_level == "Annual":
-    forecast_col = "AnnualForecastRatio"
+
+# Prepare Annual and LoP trajectory data
+
+trajectory_data = pd.DataFrame(
+    [
+        {
+            "Assessment": "Annual",
+            "Stage": "Current Actual",
+            "StageOrder": 1,
+            "Achievement": annual_actual * 100
+            if pd.notna(annual_actual)
+            else None,
+        },
+        {
+            "Assessment": "Annual",
+            "Stage": "AI Forecast",
+            "StageOrder": 2,
+            "Achievement": annual_forecast * 100
+            if pd.notna(annual_forecast)
+            else None,
+        },
+        {
+            "Assessment": "LoP",
+            "Stage": "Current Actual",
+            "StageOrder": 1,
+            "Achievement": lop_actual * 100
+            if pd.notna(lop_actual)
+            else None,
+        },
+        {
+            "Assessment": "LoP",
+            "Stage": "AI Forecast",
+            "StageOrder": 2,
+            "Achievement": lop_forecast * 100
+            if pd.notna(lop_forecast)
+            else None,
+        },
+    ]
+)
+
+trajectory_data = trajectory_data.dropna(
+    subset=["Achievement"]
+).copy()
+
+
+if trajectory_data.empty:
+
+    st.info(
+        "No valid Annual or LoP values are available "
+        "for the project trajectory chart."
+    )
+
 else:
-    forecast_col = "LoPForecastRatio"
 
-risk_table = project_data.copy()
+    chart_upper_limit = max(
+        110.0,
+        float(trajectory_data["Achievement"].max()) + 10.0,
+    )
 
-risk_table = risk_table.dropna(
-    subset=[forecast_col]
-)
+    assessment_colors = alt.Scale(
+        domain=["Annual", "LoP"],
+        range=["#2563EB", "#16A34A"],
+    )
 
-risk_table["GapToTarget"] = (
-    1.0 - risk_table[forecast_col]
-)
+    base_chart = alt.Chart(
+        trajectory_data
+    ).encode(
+        x=alt.X(
+            "Stage:N",
+            sort=["Current Actual", "AI Forecast"],
+            title=None,
+            axis=alt.Axis(
+                labelAngle=0,
+                labelFontSize=13,
+            ),
+        ),
+        y=alt.Y(
+            "Achievement:Q",
+            title="Achievement Index (%)",
+            scale=alt.Scale(
+                domain=[0, chart_upper_limit]
+            ),
+            axis=alt.Axis(
+                labelExpr="datum.value + '%'",
+                grid=True,
+            ),
+        ),
+        color=alt.Color(
+            "Assessment:N",
+            title=None,
+            scale=assessment_colors,
+            legend=alt.Legend(
+                orient="top",
+                direction="horizontal",
+            ),
+        ),
+        detail="Assessment:N",
+    )
 
-risk_table = risk_table[
-    risk_table["GapToTarget"] > 0
-]
+    trajectory_lines = base_chart.mark_line(
+        strokeWidth=4,
+    )
 
-risk_table = risk_table.sort_values(
-    "GapToTarget",
-    ascending=False
-)
-
-top_risk_indicators = risk_table.head(10)
-
-if len(top_risk_indicators) > 0:
-
-    display_risk = top_risk_indicators[
-        [
-            "IndicatorID",
-            "IndicatorName",
-            forecast_col,
-            "GapToTarget"
+    trajectory_points = base_chart.mark_point(
+        filled=True,
+        size=190,
+        stroke="white",
+        strokeWidth=2,
+    ).encode(
+        tooltip=[
+            alt.Tooltip(
+                "Assessment:N",
+                title="Assessment",
+            ),
+            alt.Tooltip(
+                "Stage:N",
+                title="Stage",
+            ),
+            alt.Tooltip(
+                "Achievement:Q",
+                title="Achievement Index (%)",
+                format=".1f",
+            ),
         ]
-    ].copy()
-
-    display_risk[forecast_col] = (
-        display_risk[forecast_col] * 100
-    ).round(1)
-
-    display_risk["GapToTarget"] = (
-        display_risk["GapToTarget"] * 100
-    ).round(1)
-
-    st.dataframe(
-        display_risk,
-        use_container_width=True
     )
 
-else:
-
-    st.success(
-        "No indicators with a forecast gap were found."
+    point_labels = base_chart.mark_text(
+        dy=-18,
+        fontSize=13,
+        fontWeight="bold",
+    ).encode(
+        text=alt.Text(
+            "Achievement:Q",
+            format=".1f",
+        )
     )
+
+    target_data = pd.DataFrame(
+        {
+            "Target": [100.0],
+        }
+    )
+
+    target_line = alt.Chart(
+        target_data
+    ).mark_rule(
+        color="#DC2626",
+        strokeWidth=3,
+        strokeDash=[8, 6],
+    ).encode(
+        y=alt.Y(
+            "Target:Q"
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "Target:Q",
+                title="Target Index (%)",
+                format=".1f",
+            )
+        ],
+    )
+
+    target_label_data = pd.DataFrame(
+        {
+            "Stage": ["AI Forecast"],
+            "Target": [100.0],
+            "Label": ["Target: 100%"],
+        }
+    )
+
+    target_label = alt.Chart(
+        target_label_data
+    ).mark_text(
+        color="#DC2626",
+        align="right",
+        dx=-8,
+        dy=-10,
+        fontSize=13,
+        fontWeight="bold",
+    ).encode(
+        x=alt.X(
+            "Stage:N",
+            sort=["Current Actual", "AI Forecast"],
+        ),
+        y=alt.Y(
+            "Target:Q"
+        ),
+        text="Label:N",
+    )
+
+    professional_line_chart = (
+        trajectory_lines
+        + trajectory_points
+        + point_labels
+        + target_line
+        + target_label
+    ).properties(
+        height=430,
+        title=(
+            f"{selected_ew_project}: "
+            "Current Achievement to AI Forecast"
+        ),
+    ).configure_view(
+        strokeWidth=0,
+    ).configure_title(
+        fontSize=17,
+        anchor="start",
+        color="#1F2937",
+    )
+
+    st.altair_chart(
+        professional_line_chart,
+        use_container_width=True,
+    )
+
+    st.caption(
+        "Blue shows the Annual trajectory, green shows the "
+        "Life-of-Project trajectory, and the red dashed line "
+        "shows the 100% target. A forecast point below the target "
+        "indicates an expected achievement gap."
+    )
+
+
+# --------------------------------------------------
+# FORECAST GAP CARDS
+# --------------------------------------------------
+
+annual_gap_column, lop_gap_column = st.columns(2)
+
+
+with annual_gap_column:
+
+    if pd.isna(annual_forecast):
+
+        st.metric(
+            "Annual Gap to Target",
+            "Not available",
+        )
+
+    else:
+
+        annual_gap_to_target = (
+            annual_forecast - 1.0
+        ) * 100
+
+        st.metric(
+            "Annual Forecast Gap",
+            f"{annual_gap_to_target:+.1f} percentage points",
+        )
+
+
+with lop_gap_column:
+
+    if pd.isna(lop_forecast):
+
+        st.metric(
+            "LoP Gap to Target",
+            "Not available",
+        )
+
+    else:
+
+        lop_gap_to_target = (
+            lop_forecast - 1.0
+        ) * 100
+
+        st.metric(
+            "LoP Forecast Gap",
+            f"{lop_gap_to_target:+.1f} percentage points",
+        )
