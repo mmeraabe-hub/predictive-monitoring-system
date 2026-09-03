@@ -387,3 +387,31 @@ st.dataframe(
     hide_index=True,
     use_container_width=True
 )
+# ==================================================
+# PROJECTS REQUIRING IMMEDIATE ATTENTION
+# ==================================================
+
+st.divider()
+
+st.subheader("🔴 Projects Requiring Immediate Attention")
+
+attention_projects = (
+    portfolio_warning
+    .sort_values(
+        "GapToTarget"
+    )
+    .head(5)
+)
+
+st.bar_chart(
+    attention_projects.set_index(
+        "Project"
+    )[
+        "GapToTarget"
+    ]
+)
+
+st.caption(
+    "Projects are ranked by forecast gap to target. "
+    "More negative values indicate greater risk."
+)
