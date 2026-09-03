@@ -410,6 +410,48 @@ st.bar_chart(
         "GapToTarget"
     ]
 )
+# ==================================================
+# EXECUTIVE PORTFOLIO RISK HEATMAP
+# ==================================================
+
+st.divider()
+
+st.subheader("🗺️ Executive Portfolio Risk Heatmap")
+
+portfolio_heatmap = (
+    snapshot
+    .groupby("Project")
+    .agg(
+        AnnualForecast=(
+            "AnnualForecastRatio",
+            "median"
+        ),
+        LoPForecast=(
+            "LoPForecastRatio",
+            "median"
+        )
+    )
+    .reset_index()
+)
+
+def portfolio_status(value):
+
+    if value >= 1.00:
+        return "🟢 On Track"
+
+    elif value >= 0.85:
+        return "🟡 At Risk"
+
+    else:
+        return "🔴 Off Track"
+
+portfolio_heatmap["Annual Status"] = (
+    portfolio_heatmap["AnnualForecast"]
+    .apply(portfolio_status)
+)
+
+portfolio_heatmap["LoP Status"] = (
+    portfolio_heatmap[
 
 st.caption(
     "Projects are ranked by forecast gap to target. "
