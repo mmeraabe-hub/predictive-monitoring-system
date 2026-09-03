@@ -298,3 +298,72 @@ with col2:
     st.write(
         f"Expected LoP Status: {lop_status}"
     )
+    # ==================================================
+# SECTION 3: WHY IS THE PROJECT AT RISK?
+# ==================================================
+
+st.divider()
+
+st.header("⭐ Why Is The Project At Risk?")
+
+analysis_level = st.radio(
+    "Risk Driver Analysis Level",
+    ["Annual", "LoP"],
+    horizontal=True
+)
+
+if analysis_level == "Annual":
+    forecast_col = "AnnualForecastRatio"
+else:
+    forecast_col = "LoPForecastRatio"
+
+risk_table = project_data.copy()
+
+risk_table = risk_table.dropna(
+    subset=[forecast_col]
+)
+
+risk_table["GapToTarget"] = (
+    1.0 - risk_table[forecast_col]
+)
+
+risk_table = risk_table[
+    risk_table["GapToTarget"] > 0
+]
+
+risk_table = risk_table.sort_values(
+    "GapToTarget",
+    ascending=False
+)
+
+top_risk_indicators = risk_table.head(10)
+
+if len(top_risk_indicators) > 0:
+
+    display_risk = top_risk_indicators[
+        [
+            "IndicatorID",
+            "IndicatorName",
+            forecast_col,
+            "GapToTarget"
+        ]
+    ].copy()
+
+    display_risk[forecast_col] = (
+        display_risk[forecast_col] * 100
+    ).round(1)
+
+    display_risk["GapToTarget"] = (
+        display_risk["GapToTarget"] * 100
+    ).round(1)
+
+    st.dataframe(
+        display_risk,
+        use_container_width=True
+    )
+
+else:
+
+    st.success(
+        "No indicators with a forecast gap were found."
+    )
