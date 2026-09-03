@@ -244,6 +244,23 @@ st.markdown(
 
 # Prepare Annual and LoP trajectory data
 
+# Calculate project-level indices
+
+annual_actual = project_data["AnnualProgress"].median()
+
+annual_forecast = project_data["AnnualForecastRatio"].median()
+
+lop_actual = project_data["LoPProgress"].median()
+
+lop_forecast = project_data["LoPForecastRatio"].median()
+
+
+trajectory_data = pd.DataFrame(
+    [
+        {
+            "Assessment": "Annual",
+            "Stage": "Current Actual",
+            ...
 trajectory_data = pd.DataFrame(
     [
         {
