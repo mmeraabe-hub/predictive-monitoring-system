@@ -1,3 +1,4 @@
+%%writefile pages/6_Risk_Classification_Dashboard.py
 import streamlit as st
 import pandas as pd
 import altair as alt
