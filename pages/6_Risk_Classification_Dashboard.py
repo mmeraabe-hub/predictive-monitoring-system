@@ -224,3 +224,140 @@ st.caption(
     "Risk classification uses the centralized thresholds "
     "defined in utils/risk_thresholds.py."
 )
+
+
+# ==================================================
+# SECTION 2: PROJECT EARLY WARNING ANALYSIS
+# ==================================================
+
+st.divider()
+st.header("2. Project Early Warning Analysis")
+
+st.markdown(
+    "This section compares the project's current achievement "
+    "with its forecasted achievement and the 100% target index."
+)
+
+early_warning_projects = sorted(
+    snapshot["Project"]
+    .dropna()
+    .astype(str)
+    .unique()
+    .tolist()
+)
+
+if not early_warning_projects:
+    st.warning("No projects are available for early warning analysis.")
+    st.stop()
+
+selected_ew_project = st.selectbox(
+    "Select Project for Early Warning Analysis",
+    early_warning_projects,
+    key="early_warning_project",
+)
+
+project_data = snapshot[
+    snapshot["Project"].astype(str) == selected_ew_project
+].copy()
+
+
+# Validate required columns before calculating
+early_warning_columns = [
+    "AnnualProgress",
+    "AnnualForecastRatio",
+    "LoPProgress",
+    "LoPForecastRatio",
+]
+
+missing_early_warning_columns = [
+    column
+    for column in early_warning_columns
+    if column not in project_data.columns
+]
+
+if missing_early_warning_columns:
+    st.error(
+        "Early warning analysis cannot run because these columns "
+        f"are missing: {', '.join(missing_early_warning_columns)}"
+    )
+    st.stop()
+
+
+# Use median normalized indices because indicators have different units
+annual_actual = project_data["AnnualProgress"].median(skipna=True)
+annual_forecast = project_data["AnnualForecastRatio"].median(skipna=True)
+
+lop_actual = project_data["LoPProgress"].median(skipna=True)
+lop_forecast = project_data["LoPForecastRatio"].median(skipna=True)
+
+
+annual_forecast_status = classify_risk(
+    annual_forecast,
+    "Annual",
+)
+
+lop_forecast_status = classify_risk(
+    lop_forecast,
+    "LoP",
+)
+
+
+def format_percentage(value):
+    if pd.isna(value):
+        return "Not available"
+    return f"{value:.1%}"
+
+
+def status_icon(status):
+    icons = {
+        "On Track": "🟢",
+        "At Risk": "🟡",
+        "Off Track": "🔴",
+        "Unknown": "⚪",
+    }
+    return icons.get(status, "⚪")
+
+
+st.subheader(f"Early Warning Summary: {selected_ew_project}")
+
+annual_column, lop_column = st.columns(2)
+
+with annual_column:
+    st.markdown("### Annual Outlook")
+
+    annual_metric_1, annual_metric_2 = st.columns(2)
+
+    annual_metric_1.metric(
+        "Current Annual Index",
+        format_percentage(annual_actual),
+    )
+
+    annual_metric_2.metric(
+        "Forecast Annual Index",
+        format_percentage(annual_forecast),
+    )
+
+    st.info(
+        f"{status_icon(annual_forecast_status)} "
+        f"Expected Annual Status: {annual_forecast_status}"
+    )
+
+with lop_column:
+    st.markdown("### Life-of-Project Outlook")
+
+    lop_metric_1, lop_metric_2 = st.columns(2)
+
+    lop_metric_1.metric(
+        "Current LoP Index",
+        format_percentage(lop_actual),
+    )
+
+    lop_metric_2.metric(
+        "Forecast LoP Index",
+        format_percentage(lop_forecast),
+    )
+
+    st.info(
+        f"{status_icon(lop_forecast_status)} "
+        f"Expected LoP Status: {lop_forecast_status}"
+    )
