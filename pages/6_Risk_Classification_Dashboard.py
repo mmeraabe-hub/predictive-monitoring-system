@@ -362,7 +362,9 @@ with lop_column:
         f"Expected LoP Status: {lop_forecast_status}"
     )
     # ==================================================
-# WHY IS THE PROJECT AT RISK?
+
+# ==================================================
+# SECTION 3: WHY IS THE PROJECT AT RISK?
 # ==================================================
 
 st.divider()
@@ -370,26 +372,30 @@ st.divider()
 st.header("⭐ Why Is The Project At Risk?")
 
 analysis_level = st.radio(
-    "Risk Contribution Analysis",
+    "Risk Driver Analysis Level",
     ["Annual", "LoP"],
     horizontal=True,
     key="risk_driver_level"
 )
 
 if analysis_level == "Annual":
-
     forecast_col = "AnnualForecastRatio"
-
 else:
-
     forecast_col = "LoPForecastRatio"
 
-
 risk_table = project_data.copy()
+
+risk_table = risk_table.dropna(
+    subset=[forecast_col]
+)
 
 risk_table["GapToTarget"] = (
     1.0 - risk_table[forecast_col]
 )
+
+risk_table = risk_table[
+    risk_table["GapToTarget"] > 0
+]
 
 risk_table = risk_table.sort_values(
     "GapToTarget",
@@ -398,35 +404,64 @@ risk_table = risk_table.sort_values(
 
 top_risk_indicators = risk_table.head(10)
 
-st.subheader(
-    f"Top Indicators Driving Risk ({analysis_level})"
-)
+if len(top_risk_indicators) == 0:
 
-display_columns = [
-    "IndicatorID",
-    "IndicatorName",
-    forecast_col,
-    "GapToTarget"
-]
+    st.success(
+        "No major risk drivers found. "
+        "The selected project is forecasted to meet or exceed targets."
+    )
 
-st.dataframe(
-    top_risk_indicators[
-        display_columns
-    ],
-    use_container_width=True
-)
+else:
 
-chart_data = (
-    top_risk_indicators[
-        ["IndicatorName", "GapToTarget"]
-    ]
-    .set_index("IndicatorName")
-)
+    st.warning(
+        f"The following indicators contribute most to "
+        f"{selected_ew_project}'s forecasted risk."
+    )
 
-st.subheader(
-    "Risk Contribution Chart"
-)
+    display_risk = top_risk_indicators[
+        [
+            "IndicatorID",
+            "IndicatorName",
+            forecast_col,
+            "GapToTarget"
+        ]
+    ].copy()
 
-st.bar_chart(
-    chart_data
-)
+    display_risk[forecast_col] = (
+        display_risk[forecast_col] * 100
+    ).round(1)
+
+    display_risk["GapToTarget"] = (
+        display_risk["GapToTarget"] * 100
+    ).round(1)
+
+    st.dataframe(
+        display_risk,
+        use_container_width=True
+    )
+
+    st.subheader(
+        "Forecast Gap to Target"
+    )
+
+    chart_data = (
+        display_risk[
+            [
+                "IndicatorID",
+                "GapToTarget"
+            ]
+        ]
+        .set_index(
+            "IndicatorID"
+        )
+    )
+
+    st.bar_chart(
+        chart_data,
+        use_container_width=True
+    )
+
+    st.caption(
+        "Larger bars indicate indicators that are forecasted "
+        "to miss their target by a bigger margin."
+    )
