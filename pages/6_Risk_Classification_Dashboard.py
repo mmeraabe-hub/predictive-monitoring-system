@@ -224,3 +224,77 @@ st.caption(
     "Risk classification uses the centralized thresholds "
     "defined in utils/risk_thresholds.py."
 )
+# ==================================================
+# SECTION 2: PROJECT EARLY WARNING ANALYSIS
+# ==================================================
+
+st.divider()
+
+st.header("📈 Project Early Warning Analysis")
+
+project_list = sorted(
+    snapshot["Project"]
+    .dropna()
+    .unique()
+    .tolist()
+)
+
+selected_ew_project = st.selectbox(
+    "Select Project for Early Warning Analysis",
+    project_list,
+    key="ew_project"
+)
+
+project_data = snapshot[
+    snapshot["Project"] == selected_ew_project
+].copy()
+
+annual_actual = project_data["AnnualProgress"].median()
+annual_forecast = project_data["AnnualForecastRatio"].median()
+
+lop_actual = project_data["LoPProgress"].median()
+lop_forecast = project_data["LoPForecastRatio"].median()
+
+annual_status = classify_risk(
+    annual_forecast,
+    "Annual"
+)
+
+lop_status = classify_risk(
+    lop_forecast,
+    "LoP"
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+
+    st.metric(
+        "Annual Actual Index",
+        f"{annual_actual:.1%}"
+    )
+
+    st.metric(
+        "Annual Forecast Index",
+        f"{annual_forecast:.1%}"
+    )
+
+    st.write(
+        f"Expected Annual Status: {annual_status}"
+    )
+
+with col2:
+
+    st.metric(
+        "LoP Actual Index",
+        f"{lop_actual:.1%}"
+    )
+
+    st.metric(
+        "LoP Forecast Index",
+        f"{lop_forecast:.1%}"
+    )
+
+    st.write(
+        f"Expected LoP Status: {lop_status}"
+    )
