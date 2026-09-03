@@ -361,3 +361,72 @@ with lop_column:
         f"{status_icon(lop_forecast_status)} "
         f"Expected LoP Status: {lop_forecast_status}"
     )
+    # ==================================================
+# WHY IS THE PROJECT AT RISK?
+# ==================================================
+
+st.divider()
+
+st.header("⭐ Why Is The Project At Risk?")
+
+analysis_level = st.radio(
+    "Risk Contribution Analysis",
+    ["Annual", "LoP"],
+    horizontal=True,
+    key="risk_driver_level"
+)
+
+if analysis_level == "Annual":
+
+    forecast_col = "AnnualForecastRatio"
+
+else:
+
+    forecast_col = "LoPForecastRatio"
+
+
+risk_table = project_data.copy()
+
+risk_table["GapToTarget"] = (
+    1.0 - risk_table[forecast_col]
+)
+
+risk_table = risk_table.sort_values(
+    "GapToTarget",
+    ascending=False
+)
+
+top_risk_indicators = risk_table.head(10)
+
+st.subheader(
+    f"Top Indicators Driving Risk ({analysis_level})"
+)
+
+display_columns = [
+    "IndicatorID",
+    "IndicatorName",
+    forecast_col,
+    "GapToTarget"
+]
+
+st.dataframe(
+    top_risk_indicators[
+        display_columns
+    ],
+    use_container_width=True
+)
+
+chart_data = (
+    top_risk_indicators[
+        ["IndicatorName", "GapToTarget"]
+    ]
+    .set_index("IndicatorName")
+)
+
+st.subheader(
+    "Risk Contribution Chart"
+)
+
+st.bar_chart(
+    chart_data
+)
