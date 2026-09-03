@@ -344,9 +344,6 @@ st.dataframe(
 # ==================================================
 # PORTFOLIO EARLY WARNING
 # ==================================================
-# ==================================================
-# PORTFOLIO EARLY WARNING
-# ==================================================
 
 st.divider()
 
@@ -413,9 +410,6 @@ st.bar_chart(
 # ==================================================
 # EXECUTIVE PORTFOLIO RISK HEATMAP
 # ==================================================
-# ==================================================
-# EXECUTIVE PORTFOLIO RISK HEATMAP
-# ==================================================
 
 st.divider()
 
@@ -448,10 +442,25 @@ def portfolio_status(value):
     else:
         return "🔴 Off Track"
 
+
 portfolio_heatmap["Annual Status"] = (
     portfolio_heatmap["AnnualForecast"]
     .apply(portfolio_status)
 )
 
 portfolio_heatmap["LoP Status"] = (
+    portfolio_heatmap["LoPForecast"]
+    .apply(portfolio_status)
+)
+
+st.dataframe(
     portfolio_heatmap[
+        [
+            "Project",
+            "Annual Status",
+            "LoP Status"
+        ]
+    ],
+    hide_index=True,
+    use_container_width=True
+)
