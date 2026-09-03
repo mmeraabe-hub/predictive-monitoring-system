@@ -296,3 +296,48 @@ st.caption(
     "The portfolio dashboard shows the latest observation "
     "available up to the selected reporting period."
 )
+# ==================================================
+# EXECUTIVE PROJECT RANKING
+# ==================================================
+
+st.divider()
+
+st.subheader("🏆 Project Performance Ranking")
+
+project_ranking = (
+    snapshot
+    .groupby("Project")
+    .agg(
+        AnnualForecast=(
+            "AnnualForecastRatio",
+            "median"
+        ),
+        LoPForecast=(
+            "LoPForecastRatio",
+            "median"
+        )
+    )
+    .reset_index()
+)
+
+project_ranking["AnnualForecast"] = (
+    project_ranking["AnnualForecast"] * 100
+).round(1)
+
+project_ranking["LoPForecast"] = (
+    project_ranking["LoPForecast"] * 100
+).round(1)
+
+project_ranking = (
+    project_ranking
+    .sort_values(
+        "LoPForecast",
+        ascending=False
+    )
+)
+
+st.dataframe(
+    project_ranking,
+    hide_index=True,
+    use_container_width=True
+)
