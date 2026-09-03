@@ -77,7 +77,7 @@ def prepare_numeric_columns(data):
                 data[column],
                 errors="coerce"
             )
-        return data
+    return data
 def create_period_snapshot(
     data,
     year,
