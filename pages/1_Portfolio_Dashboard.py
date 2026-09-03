@@ -341,3 +341,38 @@ st.dataframe(
     hide_index=True,
     use_container_width=True
 )
+# ==================================================
+# PORTFOLIO EARLY WARNING
+# ==================================================
+
+st.divider()
+
+st.subheader("🚨 Portfolio Early Warning")
+
+portfolio_warning = (
+    snapshot
+    .groupby("Project")
+    .agg(
+        AnnualForecast=(
+            "AnnualForecastRatio",
+            "median"
+        ),
+        LoPForecast=(
+            "LoPForecastRatio",
+            "median"
+        )
+    )
+    .reset_index()
+)
+
+portfolio_warning["AnnualForecast"] = (
+    portfolio_warning["AnnualForecast"] * 100
+).round(1)
+
+portfolio_warning["LoPForecast"] = (
+    portfolio_warning["LoPForecast"] * 100
+).round(1)
+
+portfolio_warning["GapToTarget"] = (
+    portfolio_warning["LoPForecast"] - 100
+).round
