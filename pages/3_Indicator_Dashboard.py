@@ -146,153 +146,364 @@ if missing_columns:
 # --------------------------------------------------
 # SIDEBAR FILTERS
 # --------------------------------------------------
+# --------------------------------------------------
+# FLEXIBLE SIDEBAR FILTERS
+# --------------------------------------------------
 
-st.sidebar.header("Indicator Selection")
+st.sidebar.header("Indicator Filters")
+
+st.sidebar.caption(
+    "Leave Projects, Years, or Quarters empty "
+    "to include all available values. "
+    "Select one indicator for detailed analysis."
+)
 
 
-projects = sorted(
+# --------------------------------------------------
+# PROJECT MULTISELECT
+# --------------------------------------------------
+
+available_projects = sorted(
     data["Project"]
     .dropna()
     .astype(str)
     .unique()
+    .tolist()
 )
 
 
-selected_project = st.sidebar.selectbox(
-    "Project",
-    projects,
-    index=None,
-    placeholder="Select a project"
+selected_projects = st.sidebar.multiselect(
+    "Projects",
+    options=available_projects,
+    default=[],
+    placeholder="All projects",
 )
 
-if selected_project is None:
 
-    st.info(
-        "Select a project from the sidebar."
+project_filtered_data = data.copy()
+
+
+if selected_projects:
+
+    project_filtered_data = project_filtered_data[
+        project_filtered_data["Project"]
+        .astype(str)
+        .isin(selected_projects)
+    ].copy()
+
+
+# --------------------------------------------------
+# YEAR MULTISELECT
+# --------------------------------------------------
+
+available_years = sorted(
+    project_filtered_data["Year"]
+    .dropna()
+    .astype(int)
+    .unique()
+    .tolist()
+)
+
+
+selected_years = st.sidebar.multiselect(
+    "Years",
+    options=available_years,
+    default=[],
+    placeholder="All years",
+)
+
+
+year_filtered_data = project_filtered_data.copy()
+
+
+if selected_years:
+
+    year_filtered_data = year_filtered_data[
+        year_filtered_data["Year"]
+        .astype(int)
+        .isin(selected_years)
+    ].copy()
+
+
+# --------------------------------------------------
+# QUARTER MULTISELECT
+# --------------------------------------------------
+
+available_quarters = sorted(
+    year_filtered_data["Quarter"]
+    .dropna()
+    .astype(int)
+    .unique()
+    .tolist()
+)
+
+
+selected_quarters = st.sidebar.multiselect(
+    "Quarters",
+    options=available_quarters,
+    default=[],
+    placeholder="All quarters",
+)
+
+
+filtered_data = year_filtered_data.copy()
+
+
+if selected_quarters:
+
+    filtered_data = filtered_data[
+        filtered_data["Quarter"]
+        .astype(int)
+        .isin(selected_quarters)
+    ].copy()
+
+
+if filtered_data.empty:
+
+    st.warning(
+        "No monitoring records match the selected filters. "
+        "Remove one or more filters to view data."
     )
 
     st.stop()
-    
-project_data = data[
-    data["Project"] == selected_project
-].copy()
 
+
+# --------------------------------------------------
+# SINGLE OPTIONAL INDICATOR SELECTOR
+# --------------------------------------------------
 
 indicator_lookup = (
-    project_data[
+    filtered_data[
         [
+            "Project",
             "IndicatorID",
-            "IndicatorName"
+            "IndicatorName",
         ]
     ]
-    .drop_duplicates()
-    .sort_values("IndicatorName")
+    .drop_duplicates(
+        subset=[
+            "Project",
+            "IndicatorID",
+        ]
+    )
+    .sort_values(
+        [
+            "Project",
+            "IndicatorName",
+        ]
+    )
 )
 
 
-indicator_labels = {
-    (
-        str(row["IndicatorID"])
+indicator_labels = {}
+
+
+for _, row in indicator_lookup.iterrows():
+
+    label = (
+        str(row["Project"])
+        + " | "
+        + str(row["IndicatorID"])
         + " | "
         + str(row["IndicatorName"])
-    ): row["IndicatorID"]
+    )
 
-    for _, row in indicator_lookup.iterrows()
-}
+    indicator_labels[label] = {
+        "Project": row["Project"],
+        "IndicatorID": row["IndicatorID"],
+    }
 
 
 selected_indicator_label = st.sidebar.selectbox(
     "Indicator",
-    list(indicator_labels.keys()),
+    options=list(
+        indicator_labels.keys()
+    ),
     index=None,
-    placeholder="Select an indicator"
+    placeholder="All indicators",
 )
+
+
+# --------------------------------------------------
+# FILTER-SCOPE LABELS
+# --------------------------------------------------
+
+project_scope_label = (
+    "All Projects"
+    if not selected_projects
+    else ", ".join(selected_projects)
+)
+
+
+year_scope_label = (
+    "All Years"
+    if not selected_years
+    else ", ".join(
+        str(year)
+        for year in selected_years
+    )
+)
+
+
+quarter_scope_label = (
+    "All Quarters"
+    if not selected_quarters
+    else ", ".join(
+        f"Q{quarter}"
+        for quarter in selected_quarters
+    )
+)
+
+
+indicator_scope_label = (
+    "All Indicators"
+    if selected_indicator_label is None
+    else selected_indicator_label
+)
+
+
+st.info(
+    f"Projects: {project_scope_label} | "
+    f"Years: {year_scope_label} | "
+    f"Quarters: {quarter_scope_label} | "
+    f"Indicator: {indicator_scope_label} | "
+    f"Source sheet: {selected_sheet}"
+)
+
+
+# --------------------------------------------------
+# ALL-INDICATOR VIEW WHEN NO INDICATOR IS SELECTED
+# --------------------------------------------------
 
 if selected_indicator_label is None:
 
-    st.info(
-        "Select an indicator from the sidebar."
+    st.subheader(
+        "All Matching Indicators"
+    )
+
+    all_indicator_snapshot = (
+        filtered_data
+        .sort_values(
+            [
+                "Project",
+                "IndicatorID",
+                "PeriodIndex",
+            ]
+        )
+        .groupby(
+            [
+                "Project",
+                "IndicatorID",
+            ],
+            as_index=False,
+        )
+        .tail(1)
+        .reset_index(drop=True)
+    )
+
+
+    summary_columns = [
+        column
+        for column in [
+            "Project",
+            "IndicatorID",
+            "IndicatorName",
+            "Unit",
+            "Year",
+            "Quarter",
+            "PeriodLabel",
+            "QuarterTarget",
+            "QuarterActual",
+            "AchievementRatio",
+            "AnnualForecastRatio",
+            "LoPForecastRatio",
+        ]
+        if column in all_indicator_snapshot.columns
+    ]
+
+
+    st.dataframe(
+        all_indicator_snapshot[
+            summary_columns
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+
+    summary1, summary2, summary3 = st.columns(3)
+
+
+    summary1.metric(
+        "Projects Represented",
+        all_indicator_snapshot[
+            "Project"
+        ].nunique(),
+    )
+
+
+    summary2.metric(
+        "Indicators Available",
+        all_indicator_snapshot[
+            "IndicatorID"
+        ].nunique(),
+    )
+
+
+    summary3.metric(
+        "Matching Observations",
+        len(filtered_data),
+    )
+
+
+    st.caption(
+        "Select one indicator from the sidebar to open "
+        "its detailed profile, monitoring horizons, "
+        "three trend charts, management insight, and history."
     )
 
     st.stop()
 
 
-selected_indicator_id = indicator_labels[
+# --------------------------------------------------
+# DETAILED SINGLE-INDICATOR DATA
+# --------------------------------------------------
+
+selected_indicator_details = indicator_labels[
     selected_indicator_label
 ]
 
 
-indicator_data = project_data[
-    project_data["IndicatorID"]
-    == selected_indicator_id
+selected_project = selected_indicator_details[
+    "Project"
+]
+
+
+selected_indicator_id = selected_indicator_details[
+    "IndicatorID"
+]
+
+
+history = filtered_data[
+    (
+        filtered_data["Project"]
+        .astype(str)
+        == str(selected_project)
+    )
+    &
+    (
+        filtered_data["IndicatorID"]
+        == selected_indicator_id
+    )
 ].copy()
 
 
-available_years = sorted(
-    indicator_data["Year"]
-    .dropna()
-    .astype(int)
-    .unique()
-)
-
-
-selected_year = st.sidebar.selectbox(
-    "Reporting Year",
-    available_years,
-    index=None,
-    placeholder="Select a year"
-)
-
-if selected_year is None:
-
-    st.info(
-        "Select a reporting year."
+history = (
+    history
+    .sort_values(
+        "PeriodIndex"
     )
-
-    st.stop()
-
-
-available_quarters = sorted(
-    indicator_data.loc[
-        indicator_data["Year"]
-        == selected_year,
-        "Quarter"
-    ]
-    .dropna()
-    .astype(int)
-    .unique()
-)
-
-
-if not available_quarters:
-    available_quarters = [1, 2, 3, 4]
-
-
-selected_quarter = st.sidebar.selectbox(
-    "Reporting Quarter",
-    available_quarters,
-    index=None,
-    placeholder="Select a quarter"
-)
-if selected_quarter is None:
-
-    st.info(
-        "Select a reporting quarter."
-    )
-
-    st.stop()
-
-
-selected_period = (
-    ((int(selected_year) - 1) * 4)
-    + int(selected_quarter)
-)
-
-
-history = get_indicator_history(
-    data=data,
-    indicator_id=selected_indicator_id,
-    selected_period=selected_period
+    .reset_index(drop=True)
 )
 
 
@@ -300,13 +511,33 @@ if history.empty:
 
     st.warning(
         "No observations are available for the selected "
-        "indicator and reporting period."
+        "indicator under the current filters."
     )
 
     st.stop()
 
 
 current_record = history.iloc[-1]
+
+
+selected_year = (
+    "All Years"
+    if not selected_years
+    else ", ".join(
+        str(year)
+        for year in selected_years
+    )
+)
+
+
+selected_quarter = (
+    "All Quarters"
+    if not selected_quarters
+    else ", ".join(
+        f"Q{quarter}"
+        for quarter in selected_quarters
+    )
+)
 
 
 # --------------------------------------------------
