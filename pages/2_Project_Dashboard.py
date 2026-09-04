@@ -259,8 +259,8 @@ project_snapshot = (
 )
 
 
-project_snapshot = portfolio_snapshot[
-    portfolio_snapshot["Project"] == selected_project
+project_snapshot = filtered_data[
+    filtered_data["Project"] == selected_project
 ].copy()
 
 
