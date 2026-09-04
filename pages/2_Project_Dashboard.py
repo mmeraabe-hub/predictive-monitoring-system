@@ -245,10 +245,17 @@ selected_period = None
 # CREATE PROJECT SNAPSHOT
 # --------------------------------------------------
 
-portfolio_snapshot = create_period_snapshot(
-    data=data,
-    year=selected_year,
-    quarter=selected_quarter
+project_snapshot = (
+    filtered_data
+    .sort_values(
+        ["IndicatorID", "PeriodIndex"]
+    )
+    .groupby(
+        "IndicatorID",
+        as_index=False
+    )
+    .tail(1)
+    .reset_index(drop=True)
 )
 
 
