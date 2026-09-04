@@ -131,70 +131,115 @@ if missing_columns:
 # SIDEBAR FILTERS
 # --------------------------------------------------
 
-st.sidebar.header("Project Selection")
+st.sidebar.header("Project Filters")
 
+st.sidebar.caption(
+    "Leave a filter empty to include all values."
+)
 
-project_options = sorted(
+available_projects = sorted(
     data["Project"]
     .dropna()
     .astype(str)
     .unique()
+    .tolist()
 )
-
-
-selected_project = st.sidebar.selectbox(
-    "Project",
-    project_options
-)
-
-
-project_data = data[
-    data["Project"] == selected_project
-].copy()
-
 
 available_years = sorted(
-    project_data["Year"]
+    data["Year"]
     .dropna()
     .astype(int)
     .unique()
+    .tolist()
 )
-
-
-selected_year = st.sidebar.selectbox(
-    "Reporting Year",
-    available_years,
-    index=len(available_years) - 1
-)
-
 
 available_quarters = sorted(
-    project_data.loc[
-        project_data["Year"] == selected_year,
-        "Quarter"
-    ]
+    data["Quarter"]
     .dropna()
     .astype(int)
     .unique()
+    .tolist()
 )
 
+selected_projects = st.sidebar.multiselect(
+    "Projects",
+    available_projects,
+    default=[]
+)
 
-if not available_quarters:
-    available_quarters = [1, 2, 3, 4]
+selected_years = st.sidebar.multiselect(
+    "Years",
+    available_years,
+    default=[]
+)
 
-
-selected_quarter = st.sidebar.selectbox(
-    "Reporting Quarter",
+selected_quarters = st.sidebar.multiselect(
+    "Quarters",
     available_quarters,
-    index=len(available_quarters) - 1
+    default=[]
 )
 
+filtered_data = data.copy()
 
-selected_period = (
-    ((int(selected_year) - 1) * 4)
-    + int(selected_quarter)
+if selected_projects:
+
+    filtered_data = filtered_data[
+        filtered_data["Project"]
+        .astype(str)
+        .isin(selected_projects)
+    ]
+
+if selected_years:
+
+    filtered_data = filtered_data[
+        filtered_data["Year"]
+        .astype(int)
+        .isin(selected_years)
+    ]
+
+if selected_quarters:
+
+    filtered_data = filtered_data[
+        filtered_data["Quarter"]
+        .astype(int)
+        .isin(selected_quarters)
+    ]
+
+if filtered_data.empty:
+
+    st.warning(
+        "No data matches the selected filters."
+    )
+
+    st.stop()
+
+# Backward compatibility with the rest of dashboard
+
+project_data = filtered_data.copy()
+
+selected_project = (
+    "All Projects"
+    if not selected_projects
+    else ", ".join(selected_projects)
 )
 
+selected_year = (
+    "All Years"
+    if not selected_years
+    else ", ".join(
+        map(str, selected_years)
+    )
+)
+
+selected_quarter = (
+    "All Quarters"
+    if not selected_quarters
+    else ", ".join(
+        [f"Q{q}" for q in selected_quarters]
+    )
+)
+
+selected_period = None
 
 # --------------------------------------------------
 # CREATE PROJECT SNAPSHOT
