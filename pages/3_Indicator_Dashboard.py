@@ -254,25 +254,6 @@ if history.empty:
 
 current_record = history.iloc[-1]
 
-selected_year = (
-    "All Years"
-    if not selected_years
-    else ", ".join(
-        str(year)
-        for year in selected_years
-    )
-)
-
-
-selected_quarter = (
-    "All Quarters"
-    if not selected_quarters
-    else ", ".join(
-        f"Q{quarter}"
-        for quarter in selected_quarters
-    )
-)
-
 
 # --------------------------------------------------
 # HELPER FUNCTIONS
