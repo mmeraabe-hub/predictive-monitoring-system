@@ -22,6 +22,17 @@ st.caption(
     "Executive overview of project and indicator performance "
     "for the selected reporting period."
 )
+st.info(
+    """
+    🟢 On Track | 🟡 At Risk | 🔴 Off Track
+
+    Quarterly Performance:
+    ≥90% = On Track | 70–89% = At Risk | <70% = Off Track
+
+    Annual & LoP Forecast:
+    ≥100% = On Track | 80–99% = At Risk | <80% = Off Track
+    """
+)
 try:
     data, selected_sheet, available_sheets = (
     load_dashboard_data()
@@ -574,3 +585,72 @@ st.dataframe(
     hide_index=True,
     use_container_width=True
 )
+# ==================================================
+# RISK CLASSIFICATION RULES
+# ==================================================
+
+st.divider()
+
+with st.expander(
+    "📖 Risk Classification Rules and Interpretation"
+):
+
+    st.markdown(
+        """
+        ### Quarterly Performance
+
+        🟢 **On Track**
+        - Achievement Ratio ≥ 90%
+
+        🟡 **At Risk**
+        - Achievement Ratio ≥ 70% and < 90%
+
+        🔴 **Off Track**
+        - Achievement Ratio < 70%
+
+
+        ### Annual Forecast
+
+        🟢 **On Track**
+        - Forecast Achievement Index ≥ 100%
+
+        🟡 **At Risk**
+        - Forecast Achievement Index ≥ 80% and < 100%
+
+        🔴 **Off Track**
+        - Forecast Achievement Index < 80%
+
+
+        ### Life-of-Project Forecast
+
+        🟢 **On Track**
+        - Forecast Achievement Index ≥ 100%
+
+        🟡 **At Risk**
+        - Forecast Achievement Index ≥ 80% and < 100%
+
+        🔴 **Off Track**
+        - Forecast Achievement Index < 80%
+
+
+        ### Executive Portfolio Interpretation
+
+        Portfolio and project classifications are generated
+        from indicator-level performance and forecast results.
+
+        These classifications are intended to support:
+
+        - Portfolio monitoring
+        - Strategic decision making
+        - Early warning detection
+        - Management review and corrective action planning
+
+        Risk ratings should always be interpreted alongside:
+
+        - Project context
+        - Data quality assessments
+        - Reporting completeness
+        - External implementation factors
+        - Professional judgement
+        """
+    )
