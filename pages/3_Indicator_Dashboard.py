@@ -1,4 +1,3 @@
-%%writefile pages/3_Indicator_Dashboard.py
 import io
 
 import numpy as np
