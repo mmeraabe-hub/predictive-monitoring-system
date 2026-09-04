@@ -9,13 +9,12 @@ import streamlit as st
 from utils.data_utils import (
     load_dashboard_data,
     prepare_numeric_columns,
-    create_period_snapshot
 )
 
 from utils.status_logic import (
     classify_quarter_status,
     classify_forecast_status,
-    status_icon
+    status_icon,
 )
 
 
@@ -26,12 +25,12 @@ from utils.status_logic import (
 st.set_page_config(
     page_title="Project Dashboard",
     page_icon="📁",
-    layout="wide"
+    layout="wide",
 )
 
 
 # --------------------------------------------------
-# SIMPLE PROFESSIONAL STYLE
+# PROFESSIONAL STYLE
 # --------------------------------------------------
 
 st.markdown(
@@ -67,20 +66,20 @@ st.markdown(
     }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
 st.markdown(
     '<div class="page-title">Project Performance Dashboard</div>',
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 st.markdown(
     '<div class="page-subtitle">'
     'Quarterly, annual, and life-of-project monitoring'
     '</div>',
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
@@ -108,7 +107,7 @@ required_columns = [
     "Quarter",
     "PeriodIndex",
     "QuarterTarget",
-    "QuarterActual"
+    "QuarterActual",
 ]
 
 
@@ -128,14 +127,15 @@ if missing_columns:
 
 
 # --------------------------------------------------
-# SIDEBAR FILTERS
+# OPTIONAL MULTISELECT FILTERS
 # --------------------------------------------------
 
 st.sidebar.header("Project Filters")
 
 st.sidebar.caption(
-    "Leave a filter empty to include all values."
+    "Leave a filter empty to include all available values."
 )
+
 
 available_projects = sorted(
     data["Project"]
@@ -145,6 +145,7 @@ available_projects = sorted(
     .tolist()
 )
 
+
 available_years = sorted(
     data["Year"]
     .dropna()
@@ -152,6 +153,7 @@ available_years = sorted(
     .unique()
     .tolist()
 )
+
 
 available_quarters = sorted(
     data["Quarter"]
@@ -161,123 +163,149 @@ available_quarters = sorted(
     .tolist()
 )
 
+
 selected_projects = st.sidebar.multiselect(
     "Projects",
-    available_projects,
-    default=[]
+    options=available_projects,
+    default=[],
+    placeholder="All projects",
 )
+
 
 selected_years = st.sidebar.multiselect(
     "Years",
-    available_years,
-    default=[]
+    options=available_years,
+    default=[],
+    placeholder="All years",
 )
+
 
 selected_quarters = st.sidebar.multiselect(
     "Quarters",
-    available_quarters,
-    default=[]
+    options=available_quarters,
+    default=[],
+    placeholder="All quarters",
 )
+
 
 filtered_data = data.copy()
 
-if selected_projects:
 
+if selected_projects:
     filtered_data = filtered_data[
         filtered_data["Project"]
         .astype(str)
         .isin(selected_projects)
-    ]
+    ].copy()
+
 
 if selected_years:
-
     filtered_data = filtered_data[
         filtered_data["Year"]
         .astype(int)
         .isin(selected_years)
-    ]
+    ].copy()
+
 
 if selected_quarters:
-
     filtered_data = filtered_data[
         filtered_data["Quarter"]
         .astype(int)
         .isin(selected_quarters)
-    ]
+    ].copy()
+
 
 if filtered_data.empty:
-
     st.warning(
-        "No data matches the selected filters."
+        "No monitoring records match the selected filters. "
+        "Remove one or more filters to view data."
     )
-
     st.stop()
 
-# Backward compatibility with the rest of dashboard
 
-project_data = filtered_data.copy()
+# --------------------------------------------------
+# FILTER DISPLAY LABELS
+# --------------------------------------------------
 
-selected_project = (
+project_display_label = (
     "All Projects"
     if not selected_projects
     else ", ".join(selected_projects)
 )
 
-selected_year = (
+
+year_display_label = (
     "All Years"
     if not selected_years
     else ", ".join(
-        map(str, selected_years)
+        str(year)
+        for year in selected_years
     )
 )
 
-selected_quarter = (
+
+quarter_display_label = (
     "All Quarters"
     if not selected_quarters
     else ", ".join(
-        [f"Q{q}" for q in selected_quarters]
+        f"Q{quarter}"
+        for quarter in selected_quarters
     )
 )
 
-selected_period = None
+
+reporting_period_label = (
+    f"{year_display_label} | {quarter_display_label}"
+)
+
+
+st.info(
+    f"Projects: {project_display_label} | "
+    f"Years: {year_display_label} | "
+    f"Quarters: {quarter_display_label} | "
+    f"Source sheet: {selected_sheet}"
+)
+
 
 # --------------------------------------------------
-# CREATE PROJECT SNAPSHOT
+# CREATE LATEST SNAPSHOT AFTER FILTERING
 # --------------------------------------------------
+
+project_data = filtered_data.copy()
+
 
 project_snapshot = (
     filtered_data
     .sort_values(
-        ["IndicatorID", "PeriodIndex"]
+        [
+            "IndicatorID",
+            "PeriodIndex",
+        ]
     )
     .groupby(
         "IndicatorID",
-        as_index=False
+        as_index=False,
     )
     .tail(1)
     .reset_index(drop=True)
 )
 
 
-project_snapshot = filtered_data[
-    filtered_data["Project"] == selected_project
-].copy()
-
-
 if project_snapshot.empty:
     st.warning(
-        "No data are available for the selected "
-        "project and reporting period."
+        "No data are available for the selected filters."
     )
     st.stop()
 
 
-# Recalculate status fields consistently
+# --------------------------------------------------
+# RECALCULATE STATUS FIELDS
+# --------------------------------------------------
 
 project_snapshot["QuarterStatus"] = (
     project_snapshot.apply(
         classify_quarter_status,
-        axis=1
+        axis=1,
     )
 )
 
@@ -328,7 +356,11 @@ def project_overall_status(dataframe):
 
     valid = dataframe[
         dataframe["LoPStatus"].isin(
-            ["On Track", "At Risk", "Off Track"]
+            [
+                "On Track",
+                "At Risk",
+                "Off Track",
+            ]
         )
     ].copy()
 
@@ -336,12 +368,19 @@ def project_overall_status(dataframe):
         return "No Data"
 
     off_track_share = (
-        valid["LoPStatus"].eq("Off Track").mean()
+        valid["LoPStatus"]
+        .eq("Off Track")
+        .mean()
     )
 
     concern_share = (
         valid["LoPStatus"]
-        .isin(["At Risk", "Off Track"])
+        .isin(
+            [
+                "At Risk",
+                "Off Track",
+            ]
+        )
         .mean()
     )
 
@@ -360,13 +399,13 @@ def dataframe_to_excel(dataframe):
 
     with pd.ExcelWriter(
         output,
-        engine="openpyxl"
+        engine="openpyxl",
     ) as writer:
 
         dataframe.to_excel(
             writer,
             sheet_name="Project_Snapshot",
-            index=False
+            index=False,
         )
 
     output.seek(0)
@@ -383,8 +422,16 @@ indicator_count = int(
 )
 
 
-project_duration = int(
-    project_data["Year"].dropna().max()
+projects_represented = int(
+    project_snapshot["Project"].nunique()
+)
+
+
+years_represented = int(
+    project_data["Year"]
+    .dropna()
+    .astype(int)
+    .nunique()
 )
 
 
@@ -396,16 +443,23 @@ overall_status = project_overall_status(
 st.markdown(
     f"""
     <div class="summary-box">
-    <strong>Project:</strong> {selected_project}<br>
-    <strong>Reporting period:</strong>
-    Year {selected_year}, Quarter {selected_quarter}<br>
-    <strong>Project duration represented:</strong>
-    {project_duration} year(s)<br>
+    <strong>Project scope:</strong>
+    {project_display_label}<br>
+
+    <strong>Reporting-period scope:</strong>
+    {reporting_period_label}<br>
+
+    <strong>Projects represented:</strong>
+    {projects_represented}<br>
+
+    <strong>Project years represented:</strong>
+    {years_represented}<br>
+
     <strong>Overall LoP monitoring signal:</strong>
     {status_icon(overall_status)} {overall_status}
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
@@ -413,26 +467,30 @@ profile1, profile2, profile3, profile4 = st.columns(4)
 
 
 profile1.metric(
-    "Project",
-    selected_project
+    "Project Scope",
+    (
+        project_display_label
+        if len(project_display_label) <= 30
+        else f"{projects_represented} projects"
+    ),
 )
 
 
 profile2.metric(
     "Reporting Period",
-    f"Y{selected_year}Q{selected_quarter}"
+    reporting_period_label,
 )
 
 
 profile3.metric(
     "Indicators",
-    f"{indicator_count:,}"
+    f"{indicator_count:,}",
 )
 
 
 profile4.metric(
     "Overall LoP Status",
-    f"{status_icon(overall_status)} {overall_status}"
+    f"{status_icon(overall_status)} {overall_status}",
 )
 
 
@@ -448,52 +506,52 @@ st.subheader("Project Risk Summary")
 quarter_counts = {
     "On Track": status_count(
         "QuarterStatus",
-        "On Track"
+        "On Track",
     ),
     "At Risk": status_count(
         "QuarterStatus",
-        "At Risk"
+        "At Risk",
     ),
     "Off Track": status_count(
         "QuarterStatus",
-        "Off Track"
+        "Off Track",
     ),
     "Not Scheduled": status_count(
         "QuarterStatus",
-        "Not Scheduled"
-    )
+        "Not Scheduled",
+    ),
 }
 
 
 annual_counts = {
     "On Track": status_count(
         "AnnualStatus",
-        "On Track"
+        "On Track",
     ),
     "At Risk": status_count(
         "AnnualStatus",
-        "At Risk"
+        "At Risk",
     ),
     "Off Track": status_count(
         "AnnualStatus",
-        "Off Track"
-    )
+        "Off Track",
+    ),
 }
 
 
 lop_counts = {
     "On Track": status_count(
         "LoPStatus",
-        "On Track"
+        "On Track",
     ),
     "At Risk": status_count(
         "LoPStatus",
-        "At Risk"
+        "At Risk",
     ),
     "Off Track": status_count(
         "LoPStatus",
-        "Off Track"
-    )
+        "Off Track",
+    ),
 }
 
 
@@ -506,17 +564,17 @@ with short_column:
 
     st.metric(
         "🟢 On Track",
-        quarter_counts["On Track"]
+        quarter_counts["On Track"],
     )
 
     st.metric(
         "🟡 At Risk",
-        quarter_counts["At Risk"]
+        quarter_counts["At Risk"],
     )
 
     st.metric(
         "🔴 Off Track",
-        quarter_counts["Off Track"]
+        quarter_counts["Off Track"],
     )
 
     st.caption(
@@ -531,17 +589,17 @@ with annual_column:
 
     st.metric(
         "🟢 On Track",
-        annual_counts["On Track"]
+        annual_counts["On Track"],
     )
 
     st.metric(
         "🟡 At Risk",
-        annual_counts["At Risk"]
+        annual_counts["At Risk"],
     )
 
     st.metric(
         "🔴 Off Track",
-        annual_counts["Off Track"]
+        annual_counts["Off Track"],
     )
 
     if "AnnualForecastRatio" in project_snapshot.columns:
@@ -566,17 +624,17 @@ with lop_column:
 
     st.metric(
         "🟢 On Track",
-        lop_counts["On Track"]
+        lop_counts["On Track"],
     )
 
     st.metric(
         "🟡 At Risk",
-        lop_counts["At Risk"]
+        lop_counts["At Risk"],
     )
 
     st.metric(
         "🔴 Off Track",
-        lop_counts["Off Track"]
+        lop_counts["Off Track"],
     )
 
     if "LoPForecastRatio" in project_snapshot.columns:
@@ -609,7 +667,7 @@ status_colors = {
     "At Risk": "#F9A825",
     "Off Track": "#C62828",
     "Not Scheduled": "#9E9E9E",
-    "No Data": "#BDBDBD"
+    "No Data": "#BDBDBD",
 }
 
 
@@ -630,7 +688,7 @@ with chart1:
         y="Indicators",
         color="Status",
         color_discrete_map=status_colors,
-        text="Indicators"
+        text="Indicators",
     )
 
     quarter_chart.update_layout(
@@ -641,13 +699,13 @@ with chart1:
             l=20,
             r=20,
             t=20,
-            b=20
-        )
+            b=20,
+        ),
     )
 
     st.plotly_chart(
         quarter_chart,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -668,7 +726,7 @@ with chart2:
         values="Indicators",
         hole=0.55,
         color="Status",
-        color_discrete_map=status_colors
+        color_discrete_map=status_colors,
     )
 
     lop_chart.update_layout(
@@ -676,18 +734,18 @@ with chart2:
             l=20,
             r=20,
             t=20,
-            b=20
-        )
+            b=20,
+        ),
     )
 
     st.plotly_chart(
         lop_chart,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
 # --------------------------------------------------
-# PROJECT TREND
+# PROJECT ACHIEVEMENT TREND
 # --------------------------------------------------
 
 st.divider()
@@ -695,9 +753,7 @@ st.divider()
 st.subheader("Project Achievement Trend")
 
 
-project_history = project_data[
-    project_data["PeriodIndex"] <= selected_period
-].copy()
+project_history = project_data.copy()
 
 
 scheduled_history = project_history[
@@ -714,56 +770,90 @@ if not scheduled_history.empty:
         / scheduled_history["QuarterTarget"]
     )
 
+    trend_group_columns = [
+        "PeriodIndex",
+        "PeriodLabel",
+    ]
+
+    if (
+        len(selected_projects) > 1
+        or not selected_projects
+    ):
+        trend_group_columns.append("Project")
+
     project_trend = (
         scheduled_history
         .groupby(
-            ["PeriodIndex", "PeriodLabel"],
-            as_index=False
+            trend_group_columns,
+            as_index=False,
         )
         .agg(
             MedianAchievementRatio=(
                 "CalculatedRatio",
-                "median"
+                "median",
             ),
             IndicatorsReported=(
                 "IndicatorID",
-                "nunique"
-            )
+                "nunique",
+            ),
         )
         .sort_values("PeriodIndex")
     )
 
-    project_trend["TargetReference"] = 1.0
-
     trend_chart = go.Figure()
 
-    trend_chart.add_trace(
-        go.Scatter(
-            x=project_trend["PeriodLabel"],
-            y=project_trend[
-                "MedianAchievementRatio"
-            ],
-            mode="lines+markers",
-            name="Median Achievement",
-            line=dict(
-                color="#1F77B4",
-                width=3
-            )
-        )
-    )
+    if "Project" in project_trend.columns:
 
-    trend_chart.add_trace(
-        go.Scatter(
-            x=project_trend["PeriodLabel"],
-            y=project_trend["TargetReference"],
-            mode="lines",
-            name="Target Reference",
-            line=dict(
-                color="#2E7D32",
-                width=2,
-                dash="dash"
+        for project_name in sorted(
+            project_trend["Project"]
+            .dropna()
+            .astype(str)
+            .unique()
+        ):
+
+            one_project = project_trend[
+                project_trend["Project"].astype(str)
+                == project_name
+            ].copy()
+
+            trend_chart.add_trace(
+                go.Scatter(
+                    x=one_project["PeriodLabel"],
+                    y=one_project[
+                        "MedianAchievementRatio"
+                    ],
+                    mode="lines+markers",
+                    name=project_name,
+                    hovertemplate=(
+                        "%{x}<br>"
+                        "Achievement: %{y:.1%}"
+                        "<extra></extra>"
+                    ),
+                )
+            )
+
+    else:
+
+        trend_chart.add_trace(
+            go.Scatter(
+                x=project_trend["PeriodLabel"],
+                y=project_trend[
+                    "MedianAchievementRatio"
+                ],
+                mode="lines+markers",
+                name="Median Achievement",
+                line=dict(
+                    color="#1F77B4",
+                    width=3,
+                ),
             )
         )
+
+    trend_chart.add_hline(
+        y=1.0,
+        line_dash="dash",
+        line_color="#2E7D32",
+        annotation_text="Target reference: 100%",
     )
 
     trend_chart.update_layout(
@@ -774,30 +864,30 @@ if not scheduled_history.empty:
             l=20,
             r=20,
             t=20,
-            b=20
-        )
+            b=20,
+        ),
     )
 
     trend_chart.update_yaxes(
-        tickformat=".0%"
+        tickformat=".0%",
     )
 
     st.plotly_chart(
         trend_chart,
-        use_container_width=True
+        use_container_width=True,
     )
 
     st.caption(
-        "The project trend uses the median achievement "
-        "ratio because project indicators have different "
-        "units and should not be added together."
+        "The trend uses the median achievement ratio because "
+        "project indicators can have different units and should "
+        "not be added together."
     )
 
 else:
 
     st.info(
-        "No scheduled quarterly observations are "
-        "available for the selected reporting period."
+        "No scheduled quarterly observations are available "
+        "for the selected filters."
     )
 
 
@@ -822,8 +912,9 @@ with gap_column1:
         annual_gap_data = (
             project_snapshot[
                 [
+                    "IndicatorID",
                     "IndicatorName",
-                    "AnnualProgressGap"
+                    "AnnualProgressGap",
                 ]
             ]
             .dropna(
@@ -844,8 +935,9 @@ with gap_column1:
                 color_continuous_scale=[
                     "#C62828",
                     "#F9A825",
-                    "#2E7D32"
-                ]
+                    "#2E7D32",
+                ],
+                hover_data=["IndicatorID"],
             )
 
             annual_gap_chart.update_layout(
@@ -857,20 +949,24 @@ with gap_column1:
                     l=20,
                     r=20,
                     t=20,
-                    b=20
-                )
+                    b=20,
+                ),
             )
 
             st.plotly_chart(
                 annual_gap_chart,
-                use_container_width=True
+                use_container_width=True,
             )
 
         else:
-
             st.info(
                 "Annual progress-gap values are unavailable."
             )
+
+    else:
+        st.info(
+            "AnnualProgressGap is not available."
+        )
 
 
 with gap_column2:
@@ -882,8 +978,9 @@ with gap_column2:
         lop_gap_data = (
             project_snapshot[
                 [
+                    "IndicatorID",
                     "IndicatorName",
-                    "LoPProgressGap"
+                    "LoPProgressGap",
                 ]
             ]
             .dropna(
@@ -904,8 +1001,9 @@ with gap_column2:
                 color_continuous_scale=[
                     "#C62828",
                     "#F9A825",
-                    "#2E7D32"
-                ]
+                    "#2E7D32",
+                ],
+                hover_data=["IndicatorID"],
             )
 
             lop_gap_chart.update_layout(
@@ -917,20 +1015,24 @@ with gap_column2:
                     l=20,
                     r=20,
                     t=20,
-                    b=20
-                )
+                    b=20,
+                ),
             )
 
             st.plotly_chart(
                 lop_gap_chart,
-                use_container_width=True
+                use_container_width=True,
             )
 
         else:
-
             st.info(
                 "LoP progress-gap values are unavailable."
             )
+
+    else:
+        st.info(
+            "LoPProgressGap is not available."
+        )
 
 
 # --------------------------------------------------
@@ -944,7 +1046,10 @@ st.subheader("Indicators Requiring Priority Attention")
 
 priority_indicators = project_snapshot[
     project_snapshot["LoPStatus"].isin(
-        ["Off Track", "At Risk"]
+        [
+            "Off Track",
+            "At Risk",
+        ]
     )
 ].copy()
 
@@ -956,7 +1061,7 @@ if not priority_indicators.empty:
         .map(
             {
                 "Off Track": 1,
-                "At Risk": 2
+                "At Risk": 2,
             }
         )
     )
@@ -964,19 +1069,22 @@ if not priority_indicators.empty:
     sort_columns = ["PriorityOrder"]
 
     if "LoPForecastRatio" in priority_indicators.columns:
-        sort_columns.append("LoPForecastRatio")
+        sort_columns.append(
+            "LoPForecastRatio"
+        )
 
     priority_indicators = (
         priority_indicators
         .sort_values(
             sort_columns,
-            ascending=True
+            ascending=True,
         )
     )
 
-    display_columns = [
+    priority_display_columns = [
         column
         for column in [
+            "Project",
             "IndicatorID",
             "IndicatorName",
             "PeriodLabel",
@@ -986,24 +1094,24 @@ if not priority_indicators.empty:
             "AnnualForecastRatio",
             "AnnualProgressGap",
             "LoPForecastRatio",
-            "LoPProgressGap"
+            "LoPProgressGap",
         ]
         if column in priority_indicators.columns
     ]
 
     st.dataframe(
         priority_indicators[
-            display_columns
+            priority_display_columns
         ].head(25),
         hide_index=True,
-        use_container_width=True
+        use_container_width=True,
     )
 
 else:
 
     st.success(
         "No indicators are classified as At Risk "
-        "or Off Track for the selected period."
+        "or Off Track for the selected filters."
     )
 
 
@@ -1044,23 +1152,22 @@ else:
 if overall_status == "Off Track":
 
     interpretation = (
-        "The project is classified as Off Track on "
-        "the LoP monitoring horizon. "
-        f"{off_track_share * 100:,.1f}% of indicators "
-        "with available classifications are Off Track. "
-        "Review the priority indicators, implementation "
-        "pace, reporting quality, and feasible corrective "
-        "actions."
+        "The selected project scope is classified as Off Track "
+        "on the LoP monitoring horizon. "
+        f"{off_track_share * 100:,.1f}% of indicators with "
+        "available classifications are Off Track. Review the "
+        "priority indicators, implementation pace, reporting "
+        "quality, and feasible corrective actions."
     )
 
 elif overall_status == "At Risk":
 
     interpretation = (
-        "The project requires close monitoring. "
-        f"{concern_share * 100:,.1f}% of indicators "
-        "with available LoP classifications are At Risk "
-        "or Off Track. Review the indicators with the "
-        "largest negative annual and LoP progress gaps."
+        "The selected project scope requires close monitoring. "
+        f"{concern_share * 100:,.1f}% of indicators with "
+        "available LoP classifications are At Risk or Off Track. "
+        "Review indicators with the largest negative annual and "
+        "LoP progress gaps."
     )
 
 elif overall_status == "On Track":
@@ -1076,7 +1183,7 @@ else:
 
     interpretation = (
         "There is insufficient information to classify "
-        "overall project performance."
+        "the selected project scope."
     )
 
 
@@ -1087,15 +1194,15 @@ st.markdown(
     {interpretation}
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
 st.warning(
-    "The project classification is a decision-support "
-    "signal. MEL and program staff should review indicator "
-    "definitions, reporting schedules, data quality, and "
-    "implementation context before management action."
+    "The classification is a decision-support signal. "
+    "MEL and program staff should review indicator definitions, "
+    "reporting schedules, data quality, and implementation "
+    "context before management action."
 )
 
 
@@ -1130,7 +1237,7 @@ download_columns = [
         "CumulativeActual",
         "LoPForecastRatio",
         "LoPProgressGap",
-        "LoPStatus"
+        "LoPStatus",
     ]
     if column in project_snapshot.columns
 ]
@@ -1141,26 +1248,59 @@ download_data = project_snapshot[
 ].copy()
 
 
+safe_project_name = (
+    "All_Projects"
+    if not selected_projects
+    else "_".join(
+        project.replace(" ", "_")
+        for project in selected_projects
+    )
+)
+
+
+safe_year_name = (
+    "All_Years"
+    if not selected_years
+    else "_".join(
+        f"Y{year}"
+        for year in selected_years
+    )
+)
+
+
+safe_quarter_name = (
+    "All_Quarters"
+    if not selected_quarters
+    else "_".join(
+        f"Q{quarter}"
+        for quarter in selected_quarters
+    )
+)
+
+
 download_filename = (
-    selected_project.replace(" ", "_")
-    + f"_Y{selected_year}Q{selected_quarter}"
-    + "_Project_Snapshot.xlsx"
+    f"{safe_project_name}_"
+    f"{safe_year_name}_"
+    f"{safe_quarter_name}_"
+    "Project_Snapshot.xlsx"
 )
 
 
 st.download_button(
     label="Download project monitoring snapshot",
-    data=dataframe_to_excel(download_data),
+    data=dataframe_to_excel(
+        download_data
+    ),
     file_name=download_filename,
     mime=(
-        "application/vnd.openxmlformats-"
-        "officedocument.spreadsheetml.sheet"
-    )
+        "application/vnd.openxmlformats-officedocument."
+        "spreadsheetml.sheet"
+    ),
 )
 
 
 st.caption(
     f"Data source sheet: {selected_sheet}. "
-    "The snapshot uses the latest available observation "
-    "for each indicator up to the selected reporting period."
+    "The snapshot uses the latest matching observation "
+    "for each indicator after applying the optional filters."
 )
