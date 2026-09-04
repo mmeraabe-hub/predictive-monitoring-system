@@ -160,10 +160,19 @@ projects = sorted(
 
 selected_project = st.sidebar.selectbox(
     "Project",
-    projects
+    projects,
+    index=None,
+    placeholder="Select a project"
 )
 
+if selected_project is None:
 
+    st.info(
+        "Select a project from the sidebar."
+    )
+
+    st.stop()
+    
 project_data = data[
     data["Project"] == selected_project
 ].copy()
@@ -194,8 +203,18 @@ indicator_labels = {
 
 selected_indicator_label = st.sidebar.selectbox(
     "Indicator",
-    list(indicator_labels.keys())
+    list(indicator_labels.keys()),
+    index=None,
+    placeholder="Select an indicator"
 )
+
+if selected_indicator_label is None:
+
+    st.info(
+        "Select an indicator from the sidebar."
+    )
+
+    st.stop()
 
 
 selected_indicator_id = indicator_labels[
@@ -220,8 +239,17 @@ available_years = sorted(
 selected_year = st.sidebar.selectbox(
     "Reporting Year",
     available_years,
-    index=len(available_years) - 1
+    index=None,
+    placeholder="Select a year"
 )
+
+if selected_year is None:
+
+    st.info(
+        "Select a reporting year."
+    )
+
+    st.stop()
 
 
 available_quarters = sorted(
@@ -243,8 +271,16 @@ if not available_quarters:
 selected_quarter = st.sidebar.selectbox(
     "Reporting Quarter",
     available_quarters,
-    index=len(available_quarters) - 1
+    index=None,
+    placeholder="Select a quarter"
 )
+if selected_quarter is None:
+
+    st.info(
+        "Select a reporting quarter."
+    )
+
+    st.stop()
 
 
 selected_period = (
