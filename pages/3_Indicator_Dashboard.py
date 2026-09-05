@@ -7,9 +7,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from utils.data_utils import (
-    load_dashboard_data,
     prepare_numeric_columns,
-    get_indicator_history
+    create_period_snapshot
+)
+
+from utils.database_utils import (
+    load_dashboard_data_sqlite
 )
 
 from utils.status_logic import (
@@ -96,9 +99,11 @@ st.markdown(
 
 try:
 
-    data, selected_sheet, available_sheets = (
-        load_dashboard_data()
-    )
+    data = load_dashboard_data_sqlite()
+
+    selected_sheet = "dashboard_data"
+
+    available_sheets
 
 except Exception as error:
 
