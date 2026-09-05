@@ -3,12 +3,14 @@ import pandas as pd
 import altair as alt
 
 from utils.data_utils import (
-    load_dashboard_data,
     prepare_numeric_columns,
 )
 
-from utils.risk_thresholds import classify_risk
+from utils.database_utils import (
+    load_dashboard_data_sqlite
+)
 
+from utils.risk_thresholds import classify_risk
 
 # ==================================================
 # PAGE CONFIGURATION
@@ -105,7 +107,14 @@ def status_message(status):
 # ==================================================
 
 try:
-    data, sheet, sheets = load_dashboard_data()
+    data = load_dashboard_data_sqlite()
+
+    sheet = "dashboard_data"
+
+    sheets = [
+        "dashboard_data"
+    ]
+
     data = prepare_numeric_columns(data)
 
 except Exception as error:
