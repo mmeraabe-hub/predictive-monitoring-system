@@ -151,7 +151,8 @@ tables = pd.read_sql_query(
 
 conn.close()
 
-display(tables)
+st.dataframe(tables)
+
 # ==================================================
 # DATA PREPARATION
 # ==================================================
