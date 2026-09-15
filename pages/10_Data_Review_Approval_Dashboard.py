@@ -1579,106 +1579,98 @@ quality_itt = create_quality_review(
 
 
 # ==================================================
-# QUALITY SUMMARY
+# CLICKABLE QUALITY SUMMARY
 # ==================================================
 
-st.divider()
+if "quality_issue_filter" not in st.session_state:
+
+    st.session_state[
+        "quality_issue_filter"
+    ] = "All Records"
 
 
-st.subheader(
-    "Data Quality Summary"
+quality_controls = [
+    {
+        "Label": "All Records",
+        "Count": len(quality_itt),
+        "FlagColumn": None,
+        "ButtonKey": "quality_all"
+    },
+    {
+        "Label": "Rows Requiring Review",
+        "Count": issue_rows,
+        "FlagColumn": "_QualityIssueCount",
+        "ButtonKey": "quality_any_issue"
+    },
+    {
+        "Label": "Missing Indicator Codes",
+        "Count": missing_indicator_ids,
+        "FlagColumn": "_Issue_MissingIndicatorID",
+        "ButtonKey": "quality_missing_id"
+    },
+    {
+        "Label": "Duplicate Indicator Codes",
+        "Count": duplicate_indicator_ids,
+        "FlagColumn": "_Issue_DuplicateIndicatorID",
+        "ButtonKey": "quality_duplicate_id"
+    },
+    {
+        "Label": "Missing Units",
+        "Count": missing_units,
+        "FlagColumn": "_Issue_MissingUnit",
+        "ButtonKey": "quality_missing_unit"
+    },
+    {
+        "Label": "Missing LoP Targets",
+        "Count": missing_lop_targets,
+        "FlagColumn": "_Issue_MissingLoPTarget",
+        "ButtonKey": "quality_missing_lop"
+    },
+    {
+        "Label": "Negative Values",
+        "Count": negative_values,
+        "FlagColumn": "_Issue_NegativeValue",
+        "ButtonKey": "quality_negative"
+    }
+]
+
+
+quality_card_columns = st.columns(4)
+
+for control_index, control in enumerate(
+    quality_controls
+):
+
+    with quality_card_columns[
+        control_index % 4
+    ]:
+
+        st.metric(
+            control["Label"],
+            f"{int(control['Count']):,}"
+        )
+
+        if st.button(
+            "View / Edit",
+            key=control["ButtonKey"]
+        ):
+
+            st.session_state[
+                "quality_issue_filter"
+            ] = control["Label"]
+
+            st.rerun()
+
+
+selected_quality_issue = (
+    st.session_state[
+        "quality_issue_filter"
+    ]
 )
 
-
-missing_indicator_ids = int(
-    quality_itt[
-        "_Issue_MissingIndicatorID"
-    ].sum()
-)
-
-
-duplicate_indicator_ids = int(
-    quality_itt[
-        "_Issue_DuplicateIndicatorID"
-    ].sum()
-)
-
-
-missing_units = int(
-    quality_itt[
-        "_Issue_MissingUnit"
-    ].sum()
-)
-
-
-negative_values = int(
-    quality_itt[
-        "_Issue_NegativeValue"
-    ].sum()
-)
-
-
-missing_lop_targets = int(
-    quality_itt[
-        "_Issue_MissingLoPTarget"
-    ].sum()
-)
-
-
-issue_rows = int(
-    quality_itt[
-        "_QualityIssueCount"
-    ].gt(0).sum()
-)
-
-
-quality1, quality2, quality3 = st.columns(3)
-
-
-quality1.metric(
-    "Rows Requiring Review",
-    f"{issue_rows:,}"
-)
-
-
-quality2.metric(
-    "Missing Indicator Codes",
-    f"{missing_indicator_ids:,}"
-)
-
-
-quality3.metric(
-    "Duplicate Indicator Codes",
-    f"{duplicate_indicator_ids:,}"
-)
-
-
-quality4, quality5, quality6 = st.columns(3)
-
-
-quality4.metric(
-    "Missing Units",
-    f"{missing_units:,}"
-)
-
-
-quality5.metric(
-    "Missing LoP Targets",
-    f"{missing_lop_targets:,}"
-)
-
-
-quality6.metric(
-    "Rows with Negative Values",
-    f"{negative_values:,}"
-)
-
-
-st.caption(
-    "Result-framework structure rows may legitimately "
-    "lack units, baselines, or targets. The quality rules "
-    "attempt to distinguish these structure rows from "
-    "measurable indicator and activity rows."
+st.info(
+    f"Current quality view: "
+    f"**{selected_quality_issue}**"
 )
 
 
@@ -1861,7 +1853,52 @@ include_structure_rows = st.toggle(
 # ==================================================
 
 filtered_itt = quality_itt.copy()
+quality_filter_map = {
+    "Missing Indicator Codes":
+        "_Issue_MissingIndicatorID",
 
+    "Duplicate Indicator Codes":
+        "_Issue_DuplicateIndicatorID",
+
+    "Missing Units":
+        "_Issue_MissingUnit",
+
+    "Missing LoP Targets":
+        "_Issue_MissingLoPTarget",
+
+    "Negative Values":
+        "_Issue_NegativeValue"
+}
+
+
+if (
+    selected_quality_issue
+    == "Rows Requiring Review"
+):
+
+    filtered_itt = filtered_itt[
+        filtered_itt[
+            "_QualityIssueCount"
+        ].gt(0)
+    ]
+
+
+elif (
+    selected_quality_issue
+    in quality_filter_map
+):
+
+    flag_column = (
+        quality_filter_map[
+            selected_quality_issue
+        ]
+    )
+
+    filtered_itt = filtered_itt[
+        filtered_itt[
+            flag_column
+        ]
+    ]
 
 if global_search.strip():
 
