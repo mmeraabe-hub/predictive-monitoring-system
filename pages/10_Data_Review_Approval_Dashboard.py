@@ -693,6 +693,670 @@ def update_batch_approval(
 
 
 # ==================================================
+# EDITING AND AUDIT-LOG FOUNDATION
+# ==================================================
+
+def initialize_editing_tables():
+
+    conn = sqlite3.connect(DB_FILE)
+
+    try:
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS
+            data_change_log (
+                ChangeID INTEGER
+                    PRIMARY KEY AUTOINCREMENT,
+
+                ChangeTimestampUTC TEXT
+                    NOT NULL,
+
+                UploadBatchID TEXT
+                    NOT NULL,
+
+                UploadID INTEGER
+                    NOT NULL,
+
+                FileName TEXT
+                    NOT NULL,
+
+                SourceSheet TEXT,
+
+                ExcelRowNumber INTEGER,
+
+                IndicatorID TEXT,
+
+                FieldName TEXT
+                    NOT NULL,
+
+                OldValue TEXT,
+
+                NewValue TEXT,
+
+                ChangedBy TEXT
+                    NOT NULL,
+
+                ChangeReason TEXT,
+
+                PreviousRecordHash TEXT,
+
+                NewRecordHash TEXT
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_change_log_batch
+            ON data_change_log (
+                UploadBatchID
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_change_log_record
+            ON data_change_log (
+                UploadID
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_change_log_indicator
+            ON data_change_log (
+                IndicatorID
+            )
+            """
+        )
+
+        conn.commit()
+
+    finally:
+
+        conn.close()
+
+
+initialize_editing_tables()
+
+
+def values_are_equal(
+    old_value,
+    new_value
+):
+
+    old_missing = (
+        old_value is None
+        or (
+            isinstance(
+                old_value,
+                float
+            )
+            and pd.isna(
+                old_value
+            )
+        )
+    )
+
+    new_missing = (
+        new_value is None
+        or (
+            isinstance(
+                new_value,
+                float
+            )
+            and pd.isna(
+                new_value
+            )
+        )
+    )
+
+    if old_missing and new_missing:
+
+        return True
+
+    if old_missing != new_missing:
+
+        return False
+
+    try:
+
+        old_numeric = pd.to_numeric(
+            pd.Series(
+                [
+                    old_value
+                ]
+            ),
+            errors="coerce"
+        ).iloc[0]
+
+        new_numeric = pd.to_numeric(
+            pd.Series(
+                [
+                    new_value
+                ]
+            ),
+            errors="coerce"
+        ).iloc[0]
+
+        if (
+            pd.notna(
+                old_numeric
+            )
+            and pd.notna(
+                new_numeric
+            )
+        ):
+
+            return bool(
+                abs(
+                    float(old_numeric)
+                    - float(new_numeric)
+                )
+                < 1e-12
+            )
+
+    except Exception:
+
+        pass
+
+    return (
+        str(old_value).strip()
+        == str(new_value).strip()
+    )
+
+
+def normalize_edited_value(
+    new_value,
+    old_value
+):
+
+    try:
+
+        if pd.isna(
+            new_value
+        ):
+
+            return None
+
+    except TypeError:
+
+        pass
+
+    if isinstance(
+        old_value,
+        bool
+    ):
+
+        if isinstance(
+            new_value,
+            str
+        ):
+
+            return (
+                new_value.strip().lower()
+                in [
+                    "true",
+                    "yes",
+                    "1"
+                ]
+            )
+
+        return bool(
+            new_value
+        )
+
+    if isinstance(
+        old_value,
+        int
+    ) and not isinstance(
+        old_value,
+        bool
+    ):
+
+        try:
+
+            return int(
+                float(
+                    new_value
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            return new_value
+
+    if isinstance(
+        old_value,
+        float
+    ):
+
+        try:
+
+            return float(
+                new_value
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            return new_value
+
+    return new_value
+
+
+def create_staged_record_hash(
+    source_sheet,
+    excel_row_number,
+    record_json
+):
+
+    import hashlib
+
+    hash_input = (
+        f"{source_sheet}|"
+        f"{excel_row_number}|"
+        f"{record_json}"
+    )
+
+    return hashlib.sha256(
+        hash_input.encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+@st.cache_data
+def load_change_history(
+    upload_batch_id
+):
+
+    conn = sqlite3.connect(
+        DB_FILE
+    )
+
+    try:
+
+        change_history = (
+            pd.read_sql_query(
+                """
+                SELECT
+                    ChangeID,
+                    ChangeTimestampUTC,
+                    UploadBatchID,
+                    UploadID,
+                    FileName,
+                    SourceSheet,
+                    ExcelRowNumber,
+                    IndicatorID,
+                    FieldName,
+                    OldValue,
+                    NewValue,
+                    ChangedBy,
+                    ChangeReason
+                FROM data_change_log
+                WHERE UploadBatchID = ?
+                ORDER BY
+                    ChangeTimestampUTC DESC,
+                    ChangeID DESC
+                """,
+                conn,
+                params=[
+                    upload_batch_id
+                ]
+            )
+        )
+
+    finally:
+
+        conn.close()
+
+    return change_history
+
+
+def save_staged_record_changes(
+    upload_batch_id,
+    upload_id,
+    edited_record,
+    changed_by,
+    change_reason
+):
+
+    change_timestamp = datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    conn = sqlite3.connect(
+        DB_FILE
+    )
+
+    try:
+
+        conn.execute(
+            "BEGIN IMMEDIATE"
+        )
+
+        batch_record = conn.execute(
+            """
+            SELECT
+                FileName,
+                UploadStatus
+            FROM itt_upload_batches
+            WHERE UploadBatchID = ?
+            """,
+            (
+                upload_batch_id,
+            )
+        ).fetchone()
+
+        if batch_record is None:
+
+            raise ValueError(
+                "The selected upload batch "
+                "could not be found."
+            )
+
+        file_name = batch_record[0]
+
+        batch_status = str(
+            batch_record[1]
+        )
+
+        if batch_status == "Approved":
+
+            raise ValueError(
+                "Approved datasets are locked. "
+                "Reopen governance must be completed "
+                "before editing an approved batch."
+            )
+
+        stored_row = conn.execute(
+            """
+            SELECT
+                SourceSheet,
+                RowNumber,
+                RecordJSON,
+                RecordHash
+            FROM uploaded_itt_staging
+            WHERE UploadBatchID = ?
+              AND UploadID = ?
+            """,
+            (
+                upload_batch_id,
+                int(upload_id)
+            )
+        ).fetchone()
+
+        if stored_row is None:
+
+            raise ValueError(
+                "The selected staged record "
+                "could not be found."
+            )
+
+        source_sheet = stored_row[0]
+
+        excel_row_number = stored_row[1]
+
+        previous_record_json = (
+            stored_row[2]
+        )
+
+        previous_record_hash = (
+            stored_row[3]
+        )
+
+        original_record = json.loads(
+            previous_record_json
+        )
+
+        updated_record = (
+            original_record.copy()
+        )
+
+        changed_fields = []
+
+        all_fields = list(
+            dict.fromkeys(
+                list(
+                    original_record.keys()
+                )
+                + list(
+                    edited_record.keys()
+                )
+            )
+        )
+
+        for field_name in all_fields:
+
+            old_value = (
+                original_record.get(
+                    field_name
+                )
+            )
+
+            raw_new_value = (
+                edited_record.get(
+                    field_name
+                )
+            )
+
+            new_value = normalize_edited_value(
+                raw_new_value,
+                old_value
+            )
+
+            if not values_are_equal(
+                old_value,
+                new_value
+            ):
+
+                updated_record[
+                    field_name
+                ] = new_value
+
+                changed_fields.append(
+                    {
+                        "FieldName":
+                            field_name,
+
+                        "OldValue":
+                            old_value,
+
+                        "NewValue":
+                            new_value
+                    }
+                )
+
+        if not changed_fields:
+
+            conn.rollback()
+
+            return {
+                "Saved":
+                    False,
+
+                "ChangedFields":
+                    0,
+
+                "Message":
+                    "No field changes were detected."
+            }
+
+        updated_record_json = json.dumps(
+            updated_record,
+            ensure_ascii=False,
+            sort_keys=False,
+            default=str
+        )
+
+        new_record_hash = (
+            create_staged_record_hash(
+                source_sheet,
+                excel_row_number,
+                updated_record_json
+            )
+        )
+
+        conn.execute(
+            """
+            UPDATE uploaded_itt_staging
+            SET
+                RecordJSON = ?,
+                RecordHash = ?,
+                UploadStatus = ?
+            WHERE UploadBatchID = ?
+              AND UploadID = ?
+            """,
+            (
+                updated_record_json,
+                new_record_hash,
+                "Pending Review",
+                upload_batch_id,
+                int(upload_id)
+            )
+        )
+
+        indicator_id = (
+            updated_record.get(
+                "IndicatorID"
+            )
+        )
+
+        audit_rows = [
+            (
+                change_timestamp,
+                upload_batch_id,
+                int(upload_id),
+                file_name,
+                source_sheet,
+                int(
+                    excel_row_number
+                ),
+                (
+                    None
+                    if indicator_id is None
+                    else str(
+                        indicator_id
+                    )
+                ),
+                change[
+                    "FieldName"
+                ],
+                (
+                    None
+                    if change[
+                        "OldValue"
+                    ] is None
+                    else str(
+                        change[
+                            "OldValue"
+                        ]
+                    )
+                ),
+                (
+                    None
+                    if change[
+                        "NewValue"
+                    ] is None
+                    else str(
+                        change[
+                            "NewValue"
+                        ]
+                    )
+                ),
+                changed_by,
+                change_reason,
+                previous_record_hash,
+                new_record_hash
+            )
+            for change in changed_fields
+        ]
+
+        conn.executemany(
+            """
+            INSERT INTO data_change_log (
+                ChangeTimestampUTC,
+                UploadBatchID,
+                UploadID,
+                FileName,
+                SourceSheet,
+                ExcelRowNumber,
+                IndicatorID,
+                FieldName,
+                OldValue,
+                NewValue,
+                ChangedBy,
+                ChangeReason,
+                PreviousRecordHash,
+                NewRecordHash
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            audit_rows
+        )
+
+        conn.execute(
+            """
+            UPDATE itt_upload_batches
+            SET
+                UploadStatus = ?,
+                ApprovedTimestampUTC = NULL,
+                ApprovedBy = NULL
+            WHERE UploadBatchID = ?
+            """,
+            (
+                "Pending Review",
+                upload_batch_id
+            )
+        )
+
+        conn.commit()
+
+        return {
+            "Saved":
+                True,
+
+            "ChangedFields":
+                len(
+                    changed_fields
+                ),
+
+            "Message": (
+                f"{len(changed_fields)} "
+                "field change(s) saved."
+            )
+        }
+
+    except Exception:
+
+        conn.rollback()
+
+        raise
+
+    finally:
+
+        conn.close()
+
+
+
+# ==================================================
 # LOAD UPLOAD BATCHES
 # ==================================================
 
@@ -1429,6 +2093,425 @@ st.download_button(
     mime="text/csv",
     key="download_filtered_itt"
 )
+
+
+# ==================================================
+# RECORD EDITING AND AUDIT LOG
+# ==================================================
+
+st.divider()
+
+
+st.subheader(
+    "Edit Selected ITT Record"
+)
+
+
+st.caption(
+    "Select one staged ITT row, update its original "
+    "uploaded fields, and save the corrections before "
+    "dataset approval."
+)
+
+
+batch_is_approved = (
+    str(
+        selected_batch[
+            "UploadStatus"
+        ]
+    )
+    == "Approved"
+)
+
+
+if batch_is_approved:
+
+    st.info(
+        "This batch is approved and locked against "
+        "record editing."
+    )
+
+
+else:
+
+    selection_source = (
+        filtered_itt.copy()
+    )
+
+    if selection_source.empty:
+
+        st.warning(
+            "No records match the current search "
+            "and filter selections."
+        )
+
+    else:
+
+        record_labels = {}
+
+        for _, record_row in (
+            selection_source.iterrows()
+        ):
+
+            upload_id = int(
+                record_row[
+                    "_UploadID"
+                ]
+            )
+
+            indicator_code = str(
+                record_row.get(
+                    "IndicatorID",
+                    ""
+                )
+                or ""
+            )
+
+            project_name = str(
+                record_row.get(
+                    "Project",
+                    ""
+                )
+                or ""
+            )
+
+            indicator_text = str(
+                record_row.get(
+                    "Indicators",
+                    ""
+                )
+                or ""
+            )
+
+            shortened_indicator = (
+                indicator_text[:80]
+            )
+
+            record_label = (
+                f"{indicator_code or 'No IndicatorID'}"
+                f" | {project_name}"
+                f" | Row "
+                f"{int(record_row['_ExcelRowNumber'])}"
+                f" | {shortened_indicator}"
+                f" | UploadID {upload_id}"
+            )
+
+            record_labels[
+                record_label
+            ] = upload_id
+
+
+        selected_record_label = (
+            st.selectbox(
+                "Select record to edit",
+                options=list(
+                    record_labels.keys()
+                ),
+                key=(
+                    "dashboard10_"
+                    "record_selector"
+                )
+            )
+        )
+
+
+        selected_upload_id = (
+            record_labels[
+                selected_record_label
+            ]
+        )
+
+
+        selected_record_row = (
+            uploaded_itt[
+                uploaded_itt[
+                    "_UploadID"
+                ].eq(
+                    selected_upload_id
+                )
+            ]
+            .iloc[0]
+        )
+
+
+        editable_columns = [
+            column
+            for column in (
+                original_columns
+            )
+            if column in (
+                uploaded_itt.columns
+            )
+        ]
+
+
+        editable_record = pd.DataFrame(
+            [
+                {
+                    column:
+                    selected_record_row[
+                        column
+                    ]
+                    for column in (
+                        editable_columns
+                    )
+                }
+            ]
+        )
+
+
+        st.warning(
+            "Changes are saved only after clicking "
+            "**Save Record Changes**. ETL is not run."
+        )
+
+
+        edited_record_dataframe = (
+            st.data_editor(
+                editable_record,
+                hide_index=True,
+                use_container_width=True,
+                num_rows="fixed",
+                key=(
+                    "dashboard10_"
+                    f"editor_{selected_upload_id}"
+                )
+            )
+        )
+
+
+        editor1, editor2 = (
+            st.columns(2)
+        )
+
+
+        with editor1:
+
+            changed_by = st.text_input(
+                "Changed by",
+                placeholder=(
+                    "Enter the reviewer name"
+                ),
+                key=(
+                    "dashboard10_"
+                    f"changed_by_{selected_upload_id}"
+                )
+            )
+
+
+        with editor2:
+
+            change_reason = (
+                st.text_input(
+                    "Reason for change",
+                    placeholder=(
+                        "Example: Corrected against "
+                        "approved source report"
+                    ),
+                    key=(
+                        "dashboard10_"
+                        f"reason_{selected_upload_id}"
+                    )
+                )
+            )
+
+
+        save_confirmation = st.checkbox(
+            "I confirm that the edited values were "
+            "checked against an authorized source.",
+            key=(
+                "dashboard10_"
+                f"edit_confirmation_"
+                f"{selected_upload_id}"
+            )
+        )
+
+
+        save_changes_disabled = not (
+            changed_by.strip()
+            and change_reason.strip()
+            and save_confirmation
+        )
+
+
+        save_changes_button = st.button(
+            "Save Record Changes",
+            type="primary",
+            disabled=(
+                save_changes_disabled
+            ),
+            key=(
+                "dashboard10_"
+                f"save_record_"
+                f"{selected_upload_id}"
+            )
+        )
+
+
+        if save_changes_button:
+
+            edited_record = (
+                edited_record_dataframe
+                .iloc[0]
+                .to_dict()
+            )
+
+            try:
+
+                save_result = (
+                    save_staged_record_changes(
+                        upload_batch_id=(
+                            selected_batch_id
+                        ),
+                        upload_id=(
+                            selected_upload_id
+                        ),
+                        edited_record=(
+                            edited_record
+                        ),
+                        changed_by=(
+                            changed_by.strip()
+                        ),
+                        change_reason=(
+                            change_reason.strip()
+                        )
+                    )
+                )
+
+
+                if save_result["Saved"]:
+
+                    st.cache_data.clear()
+
+                    st.success(
+                        "✅ "
+                        + save_result[
+                            "Message"
+                        ]
+                    )
+
+                    st.info(
+                        "The batch remains Pending Review. "
+                        "Quality checks will be recalculated."
+                    )
+
+                    st.rerun()
+
+
+                else:
+
+                    st.info(
+                        save_result[
+                            "Message"
+                        ]
+                    )
+
+
+            except Exception as error:
+
+                st.error(
+                    "The record changes could "
+                    "not be saved."
+                )
+
+                st.exception(
+                    error
+                )
+
+
+st.markdown(
+    "### Change Audit Log"
+)
+
+
+change_history = load_change_history(
+    selected_batch_id
+)
+
+
+if change_history.empty:
+
+    st.info(
+        "No record changes have been logged "
+        "for this upload."
+    )
+
+
+else:
+
+    audit_indicator_options = sorted(
+        value
+        for value in (
+            change_history[
+                "IndicatorID"
+            ]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+        if value
+    )
+
+
+    selected_audit_indicators = (
+        st.multiselect(
+            "Filter audit log by Indicator Code",
+            options=audit_indicator_options,
+            default=[],
+            key=(
+                "dashboard10_"
+                "audit_indicator_filter"
+            )
+        )
+    )
+
+
+    filtered_change_history = (
+        change_history.copy()
+    )
+
+
+    if selected_audit_indicators:
+
+        filtered_change_history = (
+            filtered_change_history[
+                filtered_change_history[
+                    "IndicatorID"
+                ]
+                .astype(str)
+                .isin(
+                    selected_audit_indicators
+                )
+            ]
+        )
+
+
+    st.dataframe(
+        filtered_change_history,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "ChangeID":
+                st.column_config.NumberColumn(
+                    "Change ID",
+                    format="%d"
+                ),
+
+            "UploadID":
+                st.column_config.NumberColumn(
+                    "Upload ID",
+                    format="%d"
+                ),
+
+            "ExcelRowNumber":
+                st.column_config.NumberColumn(
+                    "Excel Row",
+                    format="%d"
+                )
+        }
+    )
+
 
 
 # ==================================================
