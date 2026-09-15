@@ -133,7 +133,10 @@ import sqlite3
 import pandas as pd
 
 conn = sqlite3.connect(
-    "/content/predictive-monitoring-system/predictive_monitoring.db"
+    DB_FILE
+)
+conn = sqlite3.connect(
+    DB_FILE
 )
 
 tables = pd.read_sql_query(
