@@ -1576,8 +1576,45 @@ if uploaded_itt.empty:
 quality_itt = create_quality_review(
     uploaded_itt
 )
+# ==================================================
+# DATA QUALITY SUMMARY CALCULATIONS
+# ==================================================
 
+missing_indicator_ids = int(
+    quality_itt[
+        "_Issue_MissingIndicatorID"
+    ].sum()
+)
 
+duplicate_indicator_ids = int(
+    quality_itt[
+        "_Issue_DuplicateIndicatorID"
+    ].sum()
+)
+
+missing_units = int(
+    quality_itt[
+        "_Issue_MissingUnit"
+    ].sum()
+)
+
+negative_values = int(
+    quality_itt[
+        "_Issue_NegativeValue"
+    ].sum()
+)
+
+missing_lop_targets = int(
+    quality_itt[
+        "_Issue_MissingLoPTarget"
+    ].sum()
+)
+
+issue_rows = int(
+    quality_itt[
+        "_QualityIssueCount"
+    ].gt(0).sum()
+)
 # ==================================================
 # CLICKABLE QUALITY SUMMARY
 # ==================================================
