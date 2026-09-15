@@ -340,7 +340,7 @@ status_chart.update_layout(
 
 
 st.plotly_chart(
-    chart_name,
+    status_chart,
     use_container_width=True,
     key="forecast_status_breakdown"
 )
@@ -413,7 +413,7 @@ else:
     )
 
     st.plotly_chart(
-        project_chart,
+        error_histogram,
         use_container_width=True,
         key="forecast_error_distribution"
     )
@@ -712,7 +712,7 @@ else:
 
 
     st.plotly_chart(
-        project_chart,
+        error_histogram,
         use_container_width=True,
         key="project_scorecard_chart"
     )
