@@ -2170,6 +2170,412 @@ st.download_button(
 
 
 # ==================================================
+# BULK MISSING LOP TARGET CORRECTION
+# ==================================================
+
+st.divider()
+
+st.subheader(
+    "Bulk Quality Correction"
+)
+
+st.caption(
+    "Select Missing LoP Targets in the quality summary "
+    "to display affected records and enter corrections "
+    "in one controlled workspace."
+)
+
+
+batch_is_approved_for_bulk = (
+    str(
+        selected_batch[
+            "UploadStatus"
+        ]
+    )
+    == "Approved"
+)
+
+
+if batch_is_approved_for_bulk:
+
+    st.info(
+        "This dataset has already been approved and "
+        "is locked against bulk editing."
+    )
+
+
+elif (
+    selected_quality_issue
+    != "Missing LoP Targets"
+):
+
+    st.info(
+        "Click **View Records** under "
+        "**Missing LoP Targets** to activate the "
+        "bulk correction workspace."
+    )
+
+
+elif filtered_itt.empty:
+
+    st.success(
+        "No missing Life-of-Project targets remain "
+        "for the selected filters."
+    )
+
+
+else:
+
+    st.write(
+        f"Records requiring LoP target correction: "
+        f"**{len(filtered_itt):,}**"
+    )
+
+
+    bulk_columns = [
+        column
+        for column in [
+            "_UploadID",
+            "_SourceSheet",
+            "_ExcelRowNumber",
+            "Project",
+            "Indicators",
+            "IndicatorID",
+            "ProjectCode",
+            "ResultLevelStandard",
+            "Unit of Measure",
+            "Project Life Target"
+        ]
+        if column in filtered_itt.columns
+    ]
+
+
+    bulk_lop_source = (
+        filtered_itt[
+            bulk_columns
+        ]
+        .copy()
+        .reset_index(
+            drop=True
+        )
+    )
+
+
+    protected_bulk_columns = [
+        column
+        for column in bulk_columns
+        if column
+        != "Project Life Target"
+    ]
+
+
+    st.warning(
+        "Only **Project Life Target** is editable in "
+        "this workspace. Identity and context fields "
+        "are locked."
+    )
+
+
+    bulk_lop_editor = st.data_editor(
+        bulk_lop_source,
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        disabled=protected_bulk_columns,
+        height=500,
+        key=(
+            "dashboard10_bulk_lop_editor"
+        )
+    )
+
+
+    bulk_column1, bulk_column2 = (
+        st.columns(2)
+    )
+
+
+    with bulk_column1:
+
+        bulk_lop_changed_by = (
+            st.text_input(
+                "Bulk correction made by",
+                placeholder=(
+                    "Enter reviewer name"
+                ),
+                key=(
+                    "dashboard10_"
+                    "bulk_lop_changed_by"
+                )
+            )
+        )
+
+
+    with bulk_column2:
+
+        bulk_lop_reason = (
+            st.text_input(
+                "Reason for correction",
+                placeholder=(
+                    "Example: Completed from the "
+                    "approved indicator reference sheet"
+                ),
+                key=(
+                    "dashboard10_"
+                    "bulk_lop_reason"
+                )
+            )
+        )
+
+
+    bulk_lop_confirmation = (
+        st.checkbox(
+            "I confirm that these Life-of-Project "
+            "targets were checked against an "
+            "authorized source.",
+            key=(
+                "dashboard10_"
+                "bulk_lop_confirmation"
+            )
+        )
+    )
+
+
+    bulk_lop_save_disabled = not (
+        bulk_lop_changed_by.strip()
+        and bulk_lop_reason.strip()
+        and bulk_lop_confirmation
+    )
+
+
+    bulk_lop_save_button = st.button(
+        "Save Missing LoP Target Corrections",
+        type="primary",
+        disabled=bulk_lop_save_disabled,
+        key=(
+            "dashboard10_"
+            "save_bulk_lop_corrections"
+        )
+    )
+
+
+    if bulk_lop_save_button:
+
+        saved_records = 0
+
+        changed_fields = 0
+
+        unchanged_records = 0
+
+        failed_records = []
+
+
+        total_records = len(
+            bulk_lop_editor
+        )
+
+
+        progress_bar = st.progress(0)
+
+
+        for row_number, (
+            _,
+            edited_row
+        ) in enumerate(
+            bulk_lop_editor.iterrows(),
+            start=1
+        ):
+
+            upload_id = int(
+                edited_row[
+                    "_UploadID"
+                ]
+            )
+
+
+            original_match = (
+                uploaded_itt[
+                    uploaded_itt[
+                        "_UploadID"
+                    ].eq(
+                        upload_id
+                    )
+                ]
+            )
+
+
+            if original_match.empty:
+
+                failed_records.append(
+                    {
+                        "UploadID":
+                            upload_id,
+
+                        "IndicatorID":
+                            edited_row.get(
+                                "IndicatorID"
+                            ),
+
+                        "Error":
+                            "The original staged "
+                            "record was not found."
+                    }
+                )
+
+                progress_bar.progress(
+                    row_number
+                    / max(
+                        total_records,
+                        1
+                    )
+                )
+
+                continue
+
+
+            original_row = (
+                original_match.iloc[0]
+            )
+
+
+            # Start with the complete original ITT row.
+            # Only the LoP target is replaced.
+
+            complete_edited_record = {
+                column:
+                original_row[
+                    column
+                ]
+                for column in original_columns
+                if column in original_row.index
+            }
+
+
+            complete_edited_record[
+                "Project Life Target"
+            ] = edited_row[
+                "Project Life Target"
+            ]
+
+
+            try:
+
+                save_result = (
+                    save_staged_record_changes(
+                        upload_batch_id=(
+                            selected_batch_id
+                        ),
+                        upload_id=upload_id,
+                        edited_record=(
+                            complete_edited_record
+                        ),
+                        changed_by=(
+                            bulk_lop_changed_by
+                            .strip()
+                        ),
+                        change_reason=(
+                            bulk_lop_reason
+                            .strip()
+                        )
+                    )
+                )
+
+
+                if save_result["Saved"]:
+
+                    saved_records += 1
+
+                    changed_fields += int(
+                        save_result[
+                            "ChangedFields"
+                        ]
+                    )
+
+
+                else:
+
+                    unchanged_records += 1
+
+
+            except Exception as error:
+
+                failed_records.append(
+                    {
+                        "UploadID":
+                            upload_id,
+
+                        "IndicatorID":
+                            complete_edited_record
+                            .get(
+                                "IndicatorID"
+                            ),
+
+                        "Error":
+                            str(error)
+                    }
+                )
+
+
+            progress_bar.progress(
+                row_number
+                / max(
+                    total_records,
+                    1
+                )
+            )
+
+
+        st.cache_data.clear()
+
+
+        if saved_records > 0:
+
+            st.success(
+                f"✅ Saved {changed_fields:,} "
+                f"LoP target correction(s) across "
+                f"{saved_records:,} record(s)."
+            )
+
+
+        if unchanged_records > 0:
+
+            st.info(
+                f"{unchanged_records:,} record(s) "
+                "contained no detected changes."
+            )
+
+
+        if failed_records:
+
+            st.error(
+                f"{len(failed_records):,} record(s) "
+                "could not be saved."
+            )
+
+            st.dataframe(
+                pd.DataFrame(
+                    failed_records
+                ),
+                hide_index=True,
+                use_container_width=True
+            )
+
+
+        if (
+            saved_records > 0
+            and not failed_records
+        ):
+
+            st.info(
+                "The batch remains Pending Review. "
+                "The Missing LoP Targets count will "
+                "now be recalculated."
+            )
+
+            st.rerun()
+
+
+
+# ==================================================
 # RECORD EDITING AND AUDIT LOG
 # ==================================================
 
