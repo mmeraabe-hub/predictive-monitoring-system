@@ -340,8 +340,9 @@ status_chart.update_layout(
 
 
 st.plotly_chart(
-    status_chart,
-    use_container_width=True
+    chart_name,
+    use_container_width=True,
+    key="forecast_status_breakdown"
 )
 
 
@@ -411,11 +412,13 @@ else:
         )
     )
 
-
     st.plotly_chart(
-        error_histogram,
-        use_container_width=True
+        project_chart,
+        use_container_width=True,
+        key="forecast_error_distribution"
     )
+
+
 
 
     st.caption(
@@ -636,7 +639,8 @@ status_chart.update_layout(
 
 st.plotly_chart(
     status_chart,
-    use_container_width=True
+    use_container_width=True,
+    key="forecast_status_pie"
 )
 
 
@@ -708,8 +712,9 @@ else:
 
 
     st.plotly_chart(
-        error_histogram,
-        use_container_width=True
+        project_chart,
+        use_container_width=True,
+        key="project_scorecard_chart"
     )
 
 
@@ -890,7 +895,8 @@ if not project_df.empty:
 
     st.plotly_chart(
         project_chart,
-        use_container_width=True
+        use_container_width=True,
+        key="project_verfication_scorecard"
     )
 
 
