@@ -103,7 +103,6 @@ try:
 
     selected_sheet = "dashboard_data"
 
-    available_sheets
 
 except Exception as error:
 
