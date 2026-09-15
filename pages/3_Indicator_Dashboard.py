@@ -91,7 +91,31 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True
 )
+# --------------------------------------------------
+# INDICATOR HISTORY
+# --------------------------------------------------
 
+def get_indicator_history(
+    data,
+    indicator_id,
+    selected_period
+):
+    """
+    Returns historical records for the selected indicator.
+    """
+
+    history = data[
+        data["IndicatorID"]
+        == indicator_id
+    ].copy()
+
+    if "PeriodIndex" in history.columns:
+
+        history = history.sort_values(
+            "PeriodIndex"
+        )
+
+    return history
 
 # --------------------------------------------------
 # LOAD DATA
