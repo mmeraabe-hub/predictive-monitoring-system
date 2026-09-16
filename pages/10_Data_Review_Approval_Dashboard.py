@@ -2586,15 +2586,459 @@ st.subheader(
     "Bulk Missing Units Correction"
 )
 
-if (
-    selected_quality_issue
-    == "Missing Units"
-):
+st.caption(
+    "Select Missing Units in the quality summary "
+    "to display affected records and enter their "
+    "Unit of Measure in one controlled workspace."
+)
 
-    st.success(
-        "✅ Missing Units workspace activated"
+
+units_batch_is_approved = (
+    str(
+        selected_batch[
+            "UploadStatus"
+        ]
+    )
+    == "Approved"
+)
+
+
+if units_batch_is_approved:
+
+    st.info(
+        "This dataset has already been approved "
+        "and is locked against bulk editing."
     )
 
+
+elif (
+    selected_quality_issue
+    != "Missing Units"
+):
+
+    st.info(
+        "Click **View Records** under "
+        "**Missing Units** to activate this workspace."
+    )
+
+
+elif filtered_itt.empty:
+
+    st.success(
+        "No missing Unit of Measure records remain "
+        "for the current search and filters."
+    )
+
+
+else:
+
+    st.write(
+        f"Records requiring Unit of Measure correction: "
+        f"**{len(filtered_itt):,}**"
+    )
+
+
+    units_context_columns = [
+        column
+        for column in [
+            "_UploadID",
+            "_SourceSheet",
+            "_ExcelRowNumber",
+            "Project",
+            "Indicators",
+            "IndicatorID",
+            "ProjectCode",
+            "ResultLevelOriginal",
+            "ResultLevelStandard",
+            "Life Project Year",
+            "Unit of Measure",
+            "Project Life Target"
+        ]
+        if column in filtered_itt.columns
+    ]
+
+
+    if "Unit of Measure" not in units_context_columns:
+
+        st.error(
+            "The selected uploaded ITT does not contain "
+            "a Unit of Measure column."
+        )
+
+        st.stop()
+
+
+    units_editor_source = (
+        filtered_itt[
+            units_context_columns
+        ]
+        .copy()
+        .reset_index(
+            drop=True
+        )
+    )
+
+
+    units_locked_columns = [
+        column
+        for column in units_context_columns
+        if column != "Unit of Measure"
+    ]
+
+
+    st.warning(
+        "Only **Unit of Measure** is editable in this "
+        "workspace. Identity and context fields are locked."
+    )
+
+
+    units_edited_data = st.data_editor(
+        units_editor_source,
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        disabled=units_locked_columns,
+        height=500,
+        key=(
+            "dashboard10_"
+            "missing_units_bulk_editor"
+        )
+    )
+
+
+    units_reviewer_col, units_reason_col = (
+        st.columns(2)
+    )
+
+
+    with units_reviewer_col:
+
+        units_changed_by = st.text_input(
+            "Missing-unit correction made by",
+            placeholder="Enter reviewer name",
+            key=(
+                "dashboard10_"
+                "missing_units_changed_by"
+            )
+        )
+
+
+    with units_reason_col:
+
+        units_change_reason = st.text_input(
+            "Reason for unit correction",
+            placeholder=(
+                "Example: Corrected from the approved "
+                "indicator reference sheet"
+            ),
+            key=(
+                "dashboard10_"
+                "missing_units_change_reason"
+            )
+        )
+
+
+    units_confirmation = st.checkbox(
+        "I confirm that these units were checked "
+        "against an authorized source.",
+        key=(
+            "dashboard10_"
+            "missing_units_confirmation"
+        )
+    )
+
+
+    units_save_disabled = not (
+        units_changed_by.strip()
+        and units_change_reason.strip()
+        and units_confirmation
+    )
+
+
+    units_save_button = st.button(
+        "Save Missing Unit Corrections",
+        type="primary",
+        disabled=units_save_disabled,
+        key=(
+            "dashboard10_"
+            "save_missing_units"
+        )
+    )
+
+
+    if units_save_button:
+
+        units_saved_records = 0
+
+        units_changed_fields = 0
+
+        units_unchanged_records = 0
+
+        units_still_blank = []
+
+        units_failed_records = []
+
+
+        units_total_records = len(
+            units_edited_data
+        )
+
+
+        units_progress = st.progress(0)
+
+
+        for units_position, (
+            _,
+            edited_units_row
+        ) in enumerate(
+            units_edited_data.iterrows(),
+            start=1
+        ):
+
+            units_upload_id = int(
+                edited_units_row[
+                    "_UploadID"
+                ]
+            )
+
+
+            original_units_match = (
+                uploaded_itt[
+                    uploaded_itt[
+                        "_UploadID"
+                    ].eq(
+                        units_upload_id
+                    )
+                ]
+            )
+
+
+            if original_units_match.empty:
+
+                units_failed_records.append(
+                    {
+                        "UploadID":
+                            units_upload_id,
+
+                        "IndicatorID":
+                            edited_units_row.get(
+                                "IndicatorID"
+                            ),
+
+                        "Error":
+                            "Original staged record "
+                            "was not found."
+                    }
+                )
+
+                units_progress.progress(
+                    units_position
+                    / max(
+                        units_total_records,
+                        1
+                    )
+                )
+
+                continue
+
+
+            entered_unit = edited_units_row.get(
+                "Unit of Measure"
+            )
+
+
+            if pd.isna(
+                entered_unit
+            ):
+
+                entered_unit = ""
+
+            else:
+
+                entered_unit = str(
+                    entered_unit
+                ).strip()
+
+
+            if entered_unit == "":
+
+                units_still_blank.append(
+                    {
+                        "UploadID":
+                            units_upload_id,
+
+                        "IndicatorID":
+                            edited_units_row.get(
+                                "IndicatorID"
+                            ),
+
+                        "Issue":
+                            "Unit of Measure remains blank"
+                    }
+                )
+
+                units_progress.progress(
+                    units_position
+                    / max(
+                        units_total_records,
+                        1
+                    )
+                )
+
+                continue
+
+
+            original_units_row = (
+                original_units_match.iloc[0]
+            )
+
+
+            complete_units_record = {
+                column:
+                original_units_row[
+                    column
+                ]
+                for column in original_columns
+                if column in (
+                    original_units_row.index
+                )
+            }
+
+
+            complete_units_record[
+                "Unit of Measure"
+            ] = entered_unit
+
+
+            try:
+
+                units_save_result = (
+                    save_staged_record_changes(
+                        upload_batch_id=(
+                            selected_batch_id
+                        ),
+                        upload_id=(
+                            units_upload_id
+                        ),
+                        edited_record=(
+                            complete_units_record
+                        ),
+                        changed_by=(
+                            units_changed_by.strip()
+                        ),
+                        change_reason=(
+                            units_change_reason.strip()
+                        )
+                    )
+                )
+
+
+                if units_save_result[
+                    "Saved"
+                ]:
+
+                    units_saved_records += 1
+
+                    units_changed_fields += int(
+                        units_save_result[
+                            "ChangedFields"
+                        ]
+                    )
+
+
+                else:
+
+                    units_unchanged_records += 1
+
+
+            except Exception as error:
+
+                units_failed_records.append(
+                    {
+                        "UploadID":
+                            units_upload_id,
+
+                        "IndicatorID":
+                            complete_units_record.get(
+                                "IndicatorID"
+                            ),
+
+                        "Error":
+                            str(error)
+                    }
+                )
+
+
+            units_progress.progress(
+                units_position
+                / max(
+                    units_total_records,
+                    1
+                )
+            )
+
+
+        st.cache_data.clear()
+
+
+        if units_saved_records > 0:
+
+            st.success(
+                f"✅ Saved {units_changed_fields:,} "
+                f"Unit of Measure correction(s) across "
+                f"{units_saved_records:,} record(s)."
+            )
+
+
+        if units_unchanged_records > 0:
+
+            st.info(
+                f"{units_unchanged_records:,} record(s) "
+                "contained no detected changes."
+            )
+
+
+        if units_still_blank:
+
+            st.warning(
+                f"{len(units_still_blank):,} record(s) "
+                "remain blank and were not saved."
+            )
+
+            st.dataframe(
+                pd.DataFrame(
+                    units_still_blank
+                ),
+                hide_index=True,
+                use_container_width=True
+            )
+
+
+        if units_failed_records:
+
+            st.error(
+                f"{len(units_failed_records):,} record(s) "
+                "could not be saved."
+            )
+
+            st.dataframe(
+                pd.DataFrame(
+                    units_failed_records
+                ),
+                hide_index=True,
+                use_container_width=True
+            )
+
+
+        if units_saved_records > 0:
+
+            st.info(
+                "The batch remains Pending Review. "
+                "The Missing Units count will now "
+                "be recalculated."
+            )
+
+            st.rerun()
 
 
 # ==================================================
