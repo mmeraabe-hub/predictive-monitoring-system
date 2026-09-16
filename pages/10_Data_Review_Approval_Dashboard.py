@@ -2575,6 +2575,28 @@ else:
 
 
 
+
+# ==================================================
+# BULK MISSING UNITS CORRECTION
+# ==================================================
+
+st.divider()
+
+st.subheader(
+    "Bulk Missing Units Correction"
+)
+
+if (
+    selected_quality_issue
+    == "Missing Units"
+):
+
+    st.success(
+        "✅ Missing Units workspace activated"
+    )
+
+
+
 # ==================================================
 # RECORD EDITING AND AUDIT LOG
 # ==================================================
