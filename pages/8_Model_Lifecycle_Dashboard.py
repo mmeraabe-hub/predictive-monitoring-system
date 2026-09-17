@@ -1,5 +1,6 @@
 
 import sqlite3
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -1775,6 +1776,1066 @@ st.info(
     authorized reviewers to execute these actions.
     """
 )
+# ============================================================
+# SECTION 6: DECISION CONFIRMATION
+# ============================================================
+
+st.divider()
+
+st.subheader(
+    "Decision Confirmation"
+)
+
+st.caption(
+    "Review the proposed lifecycle change before "
+    "executing any Promote or Decline action."
+)
+
+confirm_col1, confirm_col2 = st.columns(2)
+
+# ============================================================
+# ORIGINAL DATASET
+# ============================================================
+
+with confirm_col1:
+
+    st.markdown(
+        """
+        <div class="dataset-heading">
+            Original Dataset
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.info(
+        f"""
+Current Production
+
+{model_label(original_lifecycle["Production"])}
+
+Recommended Candidate
+
+{model_label(original_lifecycle["Candidate"])}
+"""
+    )
+
+    confirmation_choice_original = st.radio(
+        "Choose lifecycle action",
+        [
+            "No Action",
+            "Promote Candidate",
+            "Decline Candidate"
+        ],
+        key="original_confirmation_choice"
+    )
+
+    if (
+        confirmation_choice_original
+        == "Promote Candidate"
+    ):
+
+        st.success(
+            f"""
+Are you sure?
+
+This action will:
+
+• Retire {model_label(original_lifecycle["Production"])}
+
+• Promote {model_label(original_lifecycle["Candidate"])}
+
+No changes have been applied yet.
+"""
+        )
+
+    elif (
+        confirmation_choice_original
+        == "Decline Candidate"
+    ):
+
+        st.warning(
+            f"""
+Are you sure?
+
+This action will:
+
+• Keep {model_label(original_lifecycle["Production"])}
+  as Production
+
+• Mark {model_label(original_lifecycle["Candidate"])}
+  as Declined
+
+No changes have been applied yet.
+"""
+        )
+
+
+# ============================================================
+# CAPPED DATASET
+# ============================================================
+
+with confirm_col2:
+
+    st.markdown(
+        """
+        <div class="dataset-heading">
+            Capped Dataset
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.info(
+        f"""
+Current Production
+
+{model_label(capped_lifecycle["Production"])}
+
+Recommended Candidate
+
+{model_label(capped_lifecycle["Candidate"])}
+"""
+    )
+
+    confirmation_choice_capped = st.radio(
+        "Choose lifecycle action",
+        [
+            "No Action",
+            "Promote Candidate",
+            "Decline Candidate"
+        ],
+        key="capped_confirmation_choice"
+    )
+
+    if (
+        confirmation_choice_capped
+        == "Promote Candidate"
+    ):
+
+        st.success(
+            f"""
+Are you sure?
+
+This action will:
+
+• Retire {model_label(capped_lifecycle["Production"])}
+
+• Promote {model_label(capped_lifecycle["Candidate"])}
+
+No changes have been applied yet.
+"""
+        )
+
+    elif (
+        confirmation_choice_capped
+        == "Decline Candidate"
+    ):
+
+        st.warning(
+            f"""
+Are you sure?
+
+This action will:
+
+• Keep {model_label(capped_lifecycle["Production"])}
+  as Production
+
+• Mark {model_label(capped_lifecycle["Candidate"])}
+  as Declined
+
+No changes have been applied yet.
+"""
+        )
+
+st.info(
+    """
+Confirmation Mode Only
+
+This dashboard is still operating in read-only mode.
+
+The Promote and Decline actions have not yet been enabled.
+Selecting an option only previews the intended lifecycle
+change and does not update the model registry.
+"""
+)
+
+# ============================================================
+# SECTION 7: CONTROLLED LIFECYCLE TRANSACTIONS
+# ============================================================
+
+st.divider()
+
+st.subheader(
+    "Execute Lifecycle Decision"
+)
+
+st.caption(
+    "Authorized reviewers can Promote or Decline the "
+    "recommended candidate after completing the confirmation "
+    "requirements below."
+)
+
+
+# ------------------------------------------------------------
+# Initialize audit table
+# ------------------------------------------------------------
+
+def initialize_model_decision_log():
+
+    conn = sqlite3.connect(
+        DB_FILE
+    )
+
+    try:
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS
+            model_lifecycle_decision_log (
+                DecisionID INTEGER
+                    PRIMARY KEY AUTOINCREMENT,
+
+                DecisionTimestampUTC TEXT
+                    NOT NULL,
+
+                DatasetType TEXT
+                    NOT NULL,
+
+                Action TEXT
+                    NOT NULL,
+
+                ProductionModelBefore TEXT,
+
+                ProductionVersionBefore TEXT,
+
+                CandidateModel TEXT
+                    NOT NULL,
+
+                CandidateVersion TEXT
+                    NOT NULL,
+
+                CandidateMAE REAL,
+
+                CandidateRMSE REAL,
+
+                GovernanceRecommendation TEXT,
+
+                ReviewerName TEXT
+                    NOT NULL,
+
+                DecisionReason TEXT
+                    NOT NULL,
+
+                ProductionModelAfter TEXT,
+
+                ProductionVersionAfter TEXT,
+
+                TransactionStatus TEXT
+                    NOT NULL
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_model_decision_dataset
+            ON model_lifecycle_decision_log (
+                DatasetType
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_model_decision_timestamp
+            ON model_lifecycle_decision_log (
+                DecisionTimestampUTC
+            )
+            """
+        )
+
+        conn.commit()
+
+    finally:
+
+        conn.close()
+
+
+initialize_model_decision_log()
+
+
+# ------------------------------------------------------------
+# Controlled transaction function
+# ------------------------------------------------------------
+
+def execute_lifecycle_decision(
+    dataset_type,
+    action,
+    production_row,
+    candidate_row,
+    governance,
+    reviewer_name,
+    decision_reason
+):
+
+    if action not in [
+        "Promote",
+        "Decline"
+    ]:
+
+        raise ValueError(
+            "Lifecycle action must be Promote or Decline."
+        )
+
+    if production_row is None:
+
+        raise ValueError(
+            "The current production model is unavailable."
+        )
+
+    if candidate_row is None:
+
+        raise ValueError(
+            "The recommended candidate is unavailable."
+        )
+
+    reviewer_name = str(
+        reviewer_name
+    ).strip()
+
+    decision_reason = str(
+        decision_reason
+    ).strip()
+
+    if not reviewer_name:
+
+        raise ValueError(
+            "Reviewer name is required."
+        )
+
+    if not decision_reason:
+
+        raise ValueError(
+            "Decision reason is required."
+        )
+
+    production_model = str(
+        production_row[
+            "Model"
+        ]
+    )
+
+    production_version = str(
+        production_row[
+            "Version"
+        ]
+    )
+
+    candidate_model = str(
+        candidate_row[
+            "Model"
+        ]
+    )
+
+    candidate_version = str(
+        candidate_row[
+            "Version"
+        ]
+    )
+
+    candidate_mae = float(
+        candidate_row[
+            "MAE"
+        ]
+    )
+
+    candidate_rmse = float(
+        candidate_row[
+            "RMSE"
+        ]
+    )
+
+    decision_timestamp = datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    recommendation_text = (
+        governance[
+            "Icon"
+        ]
+        + " "
+        + governance[
+            "Label"
+        ]
+    )
+
+    conn = sqlite3.connect(
+        DB_FILE
+    )
+
+    try:
+
+        conn.execute(
+            "BEGIN IMMEDIATE"
+        )
+
+        current_production = conn.execute(
+            """
+            SELECT
+                Model,
+                Version,
+                Status
+            FROM model_registry
+            WHERE DatasetType = ?
+              AND lower(trim(Status)) = 'production'
+            """,
+            (
+                dataset_type,
+            )
+        ).fetchall()
+
+        if len(
+            current_production
+        ) != 1:
+
+            raise RuntimeError(
+                f"{dataset_type} must have exactly one "
+                "Production record before the decision."
+            )
+
+        database_production_model = str(
+            current_production[0][0]
+        )
+
+        database_production_version = str(
+            current_production[0][1]
+        )
+
+        if (
+            database_production_model
+            != production_model
+            or
+            database_production_version
+            != production_version
+        ):
+
+            raise RuntimeError(
+                "The dashboard production model is no longer "
+                "consistent with the database. Refresh the "
+                "page before making a decision."
+            )
+
+        current_candidate = conn.execute(
+            """
+            SELECT
+                Model,
+                Version,
+                Status
+            FROM model_registry
+            WHERE DatasetType = ?
+              AND Model = ?
+              AND Version = ?
+            """,
+            (
+                dataset_type,
+                candidate_model,
+                candidate_version
+            )
+        ).fetchall()
+
+        if len(
+            current_candidate
+        ) != 1:
+
+            raise RuntimeError(
+                "The selected candidate was not found exactly "
+                "once in the model registry."
+            )
+
+        candidate_status = str(
+            current_candidate[0][2]
+        ).strip().lower()
+
+        if candidate_status != "candidate":
+
+            raise RuntimeError(
+                "The selected model is no longer a Candidate. "
+                "Refresh the page before making a decision."
+            )
+
+        if action == "Promote":
+
+            retired_update = conn.execute(
+                """
+                UPDATE model_registry
+                SET Status = 'Retired'
+                WHERE DatasetType = ?
+                  AND Model = ?
+                  AND Version = ?
+                  AND lower(trim(Status)) = 'production'
+                """,
+                (
+                    dataset_type,
+                    production_model,
+                    production_version
+                )
+            )
+
+            if retired_update.rowcount != 1:
+
+                raise RuntimeError(
+                    "The current Production model could not "
+                    "be retired safely."
+                )
+
+            promoted_update = conn.execute(
+                """
+                UPDATE model_registry
+                SET Status = 'Production'
+                WHERE DatasetType = ?
+                  AND Model = ?
+                  AND Version = ?
+                  AND lower(trim(Status)) = 'candidate'
+                """,
+                (
+                    dataset_type,
+                    candidate_model,
+                    candidate_version
+                )
+            )
+
+            if promoted_update.rowcount != 1:
+
+                raise RuntimeError(
+                    "The Candidate model could not be promoted."
+                )
+
+            production_model_after = (
+                candidate_model
+            )
+
+            production_version_after = (
+                candidate_version
+            )
+
+        else:
+
+            declined_update = conn.execute(
+                """
+                UPDATE model_registry
+                SET Status = 'Declined'
+                WHERE DatasetType = ?
+                  AND Model = ?
+                  AND Version = ?
+                  AND lower(trim(Status)) = 'candidate'
+                """,
+                (
+                    dataset_type,
+                    candidate_model,
+                    candidate_version
+                )
+            )
+
+            if declined_update.rowcount != 1:
+
+                raise RuntimeError(
+                    "The Candidate model could not be declined."
+                )
+
+            production_model_after = (
+                production_model
+            )
+
+            production_version_after = (
+                production_version
+            )
+
+        final_production = conn.execute(
+            """
+            SELECT
+                Model,
+                Version
+            FROM model_registry
+            WHERE DatasetType = ?
+              AND lower(trim(Status)) = 'production'
+            """,
+            (
+                dataset_type,
+            )
+        ).fetchall()
+
+        if len(
+            final_production
+        ) != 1:
+
+            raise RuntimeError(
+                f"{dataset_type} must have exactly one "
+                "Production model after the decision."
+            )
+
+        if (
+            str(
+                final_production[0][0]
+            )
+            != production_model_after
+            or
+            str(
+                final_production[0][1]
+            )
+            != production_version_after
+        ):
+
+            raise RuntimeError(
+                "Post-decision Production model verification "
+                "failed."
+            )
+
+        conn.execute(
+            """
+            INSERT INTO model_lifecycle_decision_log (
+                DecisionTimestampUTC,
+                DatasetType,
+                Action,
+                ProductionModelBefore,
+                ProductionVersionBefore,
+                CandidateModel,
+                CandidateVersion,
+                CandidateMAE,
+                CandidateRMSE,
+                GovernanceRecommendation,
+                ReviewerName,
+                DecisionReason,
+                ProductionModelAfter,
+                ProductionVersionAfter,
+                TransactionStatus
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                decision_timestamp,
+                dataset_type,
+                action,
+                production_model,
+                production_version,
+                candidate_model,
+                candidate_version,
+                candidate_mae,
+                candidate_rmse,
+                recommendation_text,
+                reviewer_name,
+                decision_reason,
+                production_model_after,
+                production_version_after,
+                "Completed"
+            )
+        )
+
+        conn.commit()
+
+        return {
+            "DatasetType":
+                dataset_type,
+
+            "Action":
+                action,
+
+            "ProductionBefore":
+                (
+                    production_model
+                    + " "
+                    + production_version
+                ),
+
+            "Candidate":
+                (
+                    candidate_model
+                    + " "
+                    + candidate_version
+                ),
+
+            "ProductionAfter":
+                (
+                    production_model_after
+                    + " "
+                    + production_version_after
+                ),
+
+            "Reviewer":
+                reviewer_name,
+
+            "TimestampUTC":
+                decision_timestamp,
+
+            "Status":
+                "Completed"
+        }
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        conn.close()
+
+
+# ------------------------------------------------------------
+# Render action form
+# ------------------------------------------------------------
+
+def render_decision_form(
+    container,
+    dataset_type,
+    lifecycle,
+    governance,
+    confirmation_choice
+):
+
+    with container:
+
+        production_row = lifecycle[
+            "Production"
+        ]
+
+        candidate_row = lifecycle[
+            "Candidate"
+        ]
+
+        st.markdown(
+            (
+                '<div class="dataset-heading">'
+                + dataset_type
+                + " Dataset Decision"
+                + "</div>"
+            ),
+            unsafe_allow_html=True
+        )
+
+        if candidate_row is None:
+
+            st.info(
+                "No recommended Candidate is currently "
+                "available for this dataset."
+            )
+
+            return
+
+        if confirmation_choice == "No Action":
+
+            st.info(
+                "Select Promote Candidate or Decline Candidate "
+                "in the Decision Confirmation section above."
+            )
+
+            return
+
+        if confirmation_choice == (
+            "Promote Candidate"
+        ):
+
+            selected_action = "Promote"
+
+            st.success(
+                "You selected Promote. Complete the required "
+                "review information and confirm the action."
+            )
+
+        else:
+
+            selected_action = "Decline"
+
+            st.warning(
+                "You selected Decline. Complete the required "
+                "review information and confirm the action."
+            )
+
+        with st.form(
+            key=(
+                "lifecycle_decision_form_"
+                + dataset_type.lower()
+            )
+        ):
+
+            reviewer_name = st.text_input(
+                "Reviewer name",
+                key=(
+                    "reviewer_name_"
+                    + dataset_type.lower()
+                ),
+                placeholder=(
+                    "Enter SME, MEL specialist, "
+                    "or designated reviewer name"
+                )
+            )
+
+            decision_reason = st.text_area(
+                "Decision reason",
+                key=(
+                    "decision_reason_"
+                    + dataset_type.lower()
+                ),
+                placeholder=(
+                    "Explain why the candidate should be "
+                    "promoted or declined."
+                ),
+                height=120
+            )
+
+            acknowledgement = st.checkbox(
+                (
+                    "I reviewed the model comparison, "
+                    "recommendation evidence, drift result, "
+                    "and lifecycle impact."
+                ),
+                key=(
+                    "decision_acknowledgement_"
+                    + dataset_type.lower()
+                )
+            )
+
+            exact_confirmation_text = (
+                selected_action.upper()
+                + " "
+                + dataset_type.upper()
+            )
+
+            typed_confirmation = st.text_input(
+                (
+                    "Type "
+                    + exact_confirmation_text
+                    + " to confirm"
+                ),
+                key=(
+                    "typed_confirmation_"
+                    + dataset_type.lower()
+                )
+            )
+
+            submit_decision = st.form_submit_button(
+                (
+                    "Confirm "
+                    + selected_action
+                    + " for "
+                    + dataset_type
+                ),
+                type="primary",
+                use_container_width=True
+            )
+
+        if submit_decision:
+
+            validation_messages = []
+
+            if not str(
+                reviewer_name
+            ).strip():
+
+                validation_messages.append(
+                    "Reviewer name is required."
+                )
+
+            if not str(
+                decision_reason
+            ).strip():
+
+                validation_messages.append(
+                    "Decision reason is required."
+                )
+
+            if not acknowledgement:
+
+                validation_messages.append(
+                    "The review acknowledgement is required."
+                )
+
+            if (
+                str(
+                    typed_confirmation
+                ).strip().upper()
+                != exact_confirmation_text
+            ):
+
+                validation_messages.append(
+                    "The confirmation text does not match "
+                    + exact_confirmation_text
+                    + "."
+                )
+
+            if validation_messages:
+
+                for message in validation_messages:
+
+                    st.error(
+                        message
+                    )
+
+            else:
+
+                try:
+
+                    result = execute_lifecycle_decision(
+                        dataset_type=dataset_type,
+                        action=selected_action,
+                        production_row=production_row,
+                        candidate_row=candidate_row,
+                        governance=governance,
+                        reviewer_name=reviewer_name,
+                        decision_reason=decision_reason
+                    )
+
+                    st.success(
+                        (
+                            selected_action
+                            + " completed successfully for "
+                            + dataset_type
+                            + "."
+                        )
+                    )
+
+                    st.json(
+                        result
+                    )
+
+                    st.cache_data.clear()
+
+                    st.rerun()
+
+                except Exception as error:
+
+                    st.error(
+                        (
+                            selected_action
+                            + " could not be completed. "
+                            "The transaction was rolled back."
+                        )
+                    )
+
+                    st.exception(
+                        error
+                    )
+
+
+# ------------------------------------------------------------
+# Render Original and Capped transaction controls
+# ------------------------------------------------------------
+
+transaction_original_col, transaction_capped_col = (
+    st.columns(2)
+)
+
+
+render_decision_form(
+    container=transaction_original_col,
+    dataset_type="Original",
+    lifecycle=original_lifecycle,
+    governance=original_governance,
+    confirmation_choice=(
+        confirmation_choice_original
+    )
+)
+
+
+render_decision_form(
+    container=transaction_capped_col,
+    dataset_type="Capped",
+    lifecycle=capped_lifecycle,
+    governance=capped_governance,
+    confirmation_choice=(
+        confirmation_choice_capped
+    )
+)
+
+
+# ------------------------------------------------------------
+# Decision history
+# ------------------------------------------------------------
+
+st.divider()
+
+st.subheader(
+    "Lifecycle Decision History"
+)
+
+
+@st.cache_data
+def load_model_decision_history():
+
+    conn = sqlite3.connect(
+        DB_FILE
+    )
+
+    try:
+
+        decision_history = pd.read_sql_query(
+            """
+            SELECT
+                DecisionTimestampUTC,
+                DatasetType,
+                Action,
+                ProductionModelBefore,
+                ProductionVersionBefore,
+                CandidateModel,
+                CandidateVersion,
+                GovernanceRecommendation,
+                ReviewerName,
+                DecisionReason,
+                ProductionModelAfter,
+                ProductionVersionAfter,
+                TransactionStatus
+            FROM model_lifecycle_decision_log
+            ORDER BY
+                DecisionTimestampUTC DESC,
+                DecisionID DESC
+            """,
+            conn
+        )
+
+    finally:
+
+        conn.close()
+
+    return decision_history
+
+
+decision_history = load_model_decision_history()
+
+
+if decision_history.empty:
+
+    st.info(
+        "No Promote or Decline decisions have been "
+        "recorded yet."
+    )
+
+else:
+
+    st.dataframe(
+        decision_history,
+        hide_index=True,
+        use_container_width=True
+    )
+
+
+st.warning(
+    """
+Lifecycle transactions are permanent registry decisions.
+
+Before confirming an action, verify the dataset type,
+production version, candidate version, recommendation,
+drift result, and reviewer rationale.
+"""
+)
+
+
 
 # ============================================================
 # HUMAN OVERSIGHT NOTICE
