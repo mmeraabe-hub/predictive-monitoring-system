@@ -1612,7 +1612,169 @@ st.dataframe(
             )
     }
 )
+# ============================================================
+# SECTION 5: ACTION PREVIEW
+# ============================================================
 
+st.divider()
+
+st.subheader(
+    "Lifecycle Action Preview"
+)
+
+st.caption(
+    "This section shows what would happen if a reviewer "
+    "chooses Promote or Decline. No database changes are "
+    "performed by this dashboard."
+)
+
+original_col, capped_col = st.columns(2)
+
+
+# ============================================================
+# ORIGINAL DATASET
+# ============================================================
+
+with original_col:
+
+    st.markdown(
+        """
+        <div class="dataset-heading">
+            Original Dataset
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("### If Promote is Chosen")
+
+    st.success(
+        f"""
+        Current Production
+
+        {model_label(original_lifecycle["Production"])}
+
+        ↓
+
+        Status changes from Production → Retired
+
+
+        Candidate
+
+        {model_label(original_lifecycle["Candidate"])}
+
+        ↓
+
+        Status changes from Candidate → Production
+        """
+    )
+
+    st.markdown("### If Decline is Chosen")
+
+    st.warning(
+        f"""
+        Current Production
+
+        {model_label(original_lifecycle["Production"])}
+
+        ↓
+
+        Remains Production
+
+
+        Candidate
+
+        {model_label(original_lifecycle["Candidate"])}
+
+        ↓
+
+        Status changes from Candidate → Declined
+        """
+    )
+
+
+# ============================================================
+# CAPPED DATASET
+# ============================================================
+
+with capped_col:
+
+    st.markdown(
+        """
+        <div class="dataset-heading">
+            Capped Dataset
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("### If Promote is Chosen")
+
+    st.success(
+        f"""
+        Current Production
+
+        {model_label(capped_lifecycle["Production"])}
+
+        ↓
+
+        Status changes from Production → Retired
+
+
+        Candidate
+
+        {model_label(capped_lifecycle["Candidate"])}
+
+        ↓
+
+        Status changes from Candidate → Production
+        """
+    )
+
+    st.markdown("### If Decline is Chosen")
+
+    st.warning(
+        f"""
+        Current Production
+
+        {model_label(capped_lifecycle["Production"])}
+
+        ↓
+
+        Remains Production
+
+
+        Candidate
+
+        {model_label(capped_lifecycle["Candidate"])}
+
+        ↓
+
+        Status changes from Candidate → Declined
+        """
+    )
+
+
+# ============================================================
+# ACTION SUMMARY
+# ============================================================
+
+st.info(
+    """
+    Action Summary
+
+    Promote:
+    - Current Production model becomes Retired
+    - Candidate model becomes Production
+
+    Decline:
+    - Current Production model remains active
+    - Candidate model becomes Declined
+
+    A future version of this dashboard will allow
+    authorized reviewers to execute these actions.
+    """
+)
 
 # ============================================================
 # HUMAN OVERSIGHT NOTICE
