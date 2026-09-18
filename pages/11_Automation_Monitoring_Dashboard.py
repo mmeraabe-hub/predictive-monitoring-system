@@ -157,21 +157,10 @@ st.info(
 # DATABASE PATH
 # ============================================================
 
-DB_FILE = Path(
-    "/content/predictive_monitoring.db"
+DB_FILE = (
+    Path(__file__).resolve().parents[1]
+    / "predictive_monitoring.db"
 )
-
-# Resolve a relative configured path against the project root.
-if not DB_FILE.is_absolute() and "__file__" in globals():
-
-    project_root = Path(
-        __file__
-    ).resolve().parents[1]
-
-    DB_FILE = (
-        project_root
-        / DB_FILE
-    ).resolve()
 
 
 # ============================================================
@@ -1333,7 +1322,160 @@ with governance_detail_col:
         st.error(
             error_message
         )
+# ============================================================
+# CHAMPION MODELS AND ROLLBACK READINESS
+# ============================================================
 
+st.divider()
+
+st.subheader(
+    "🏆 Champion Models and Rollback Readiness"
+)
+
+st.caption(
+    "Current production champions and available rollback candidates."
+)
+
+champion_col1, champion_col2 = st.columns(2)
+
+with champion_col1:
+
+    st.markdown(
+        "### Original Dataset Champion"
+    )
+
+    original_champion = registry[
+        (registry["DatasetType"] == "Original")
+        &
+        (registry["Status"] == "Production")
+    ]
+
+    if not original_champion.empty:
+
+        original_champion = original_champion.iloc[0]
+
+        st.success(
+            f"""
+Model: {original_champion['Model']}
+
+Version: {original_champion['Version']}
+
+MAE: {original_champion['MAE']:.4f}
+
+RMSE: {original_champion['RMSE']:.4f}
+"""
+        )
+
+with champion_col2:
+
+    st.markdown(
+        "### Capped Dataset Champion"
+    )
+
+    capped_champion = registry[
+        (registry["DatasetType"] == "Capped")
+        &
+        (registry["Status"] == "Production")
+    ]
+
+    if not capped_champion.empty:
+
+        capped_champion = capped_champion.iloc[0]
+
+        st.success(
+            f"""
+Model: {capped_champion['Model']}
+
+Version: {capped_champion['Version']}
+
+MAE: {capped_champion['MAE']:.4f}
+
+RMSE: {capped_champion['RMSE']:.4f}
+"""
+        )
+
+st.divider()
+
+rollback_col1, rollback_col2 = st.columns(2)
+
+with rollback_col1:
+
+    st.markdown(
+        "### Original Rollback Readiness"
+    )
+
+    original_retired = registry[
+        (registry["DatasetType"] == "Original")
+        &
+        (registry["Status"] == "Retired")
+    ]
+
+    if original_retired.empty:
+
+        st.warning(
+            "No rollback candidate available."
+        )
+
+    else:
+
+        candidate = original_retired.iloc[0]
+
+        st.info(
+            f"""
+Rollback Candidate Found
+
+Model:
+{candidate['Model']}
+
+Version:
+{candidate['Version']}
+"""
+        )
+
+with rollback_col2:
+
+    st.markdown(
+        "### Capped Rollback Readiness"
+    )
+
+    capped_retired = registry[
+        (registry["DatasetType"] == "Capped")
+        &
+        (registry["Status"] == "Retired")
+    ]
+
+    if capped_retired.empty:
+
+        st.warning(
+            "No rollback candidate available."
+        )
+
+    else:
+
+        candidate = capped_retired.iloc[0]
+
+        st.info(
+            f"""
+Rollback Candidate Found
+
+Model:
+{candidate['Model']}
+
+Version:
+{candidate['Version']}
+"""
+        )
+
+st.info(
+    """
+Champion = Current Production model
+
+Rollback Candidate = A previously Retired model that could
+potentially be restored after governance review.
+
+This section is READ ONLY and performs no database updates.
+"""
+)
 
 # ============================================================
 # FOOTER
