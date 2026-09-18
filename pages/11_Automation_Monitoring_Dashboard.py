@@ -1326,6 +1326,10 @@ with governance_detail_col:
 # CHAMPION MODELS AND ROLLBACK READINESS
 # ============================================================
 
+# ============================================================
+# CHAMPION MODELS AND ROLLBACK READINESS
+# ============================================================
+
 st.divider()
 
 st.subheader(
@@ -1344,27 +1348,34 @@ with champion_col1:
         "### Original Dataset Champion"
     )
 
-    original_champion = registry[
-        (registry["DatasetType"] == "Original")
+    original_champion = registry_data[
+        (registry_data["DatasetType"] == "Original")
         &
-        (registry["Status"] == "Production")
+        (registry_data["Status"] == "Production")
     ]
 
-    if not original_champion.empty:
+    if original_champion.empty:
 
-        original_champion = original_champion.iloc[0]
+        st.warning(
+            "No Production champion found."
+        )
+
+    else:
+
+        champion = original_champion.iloc[0]
 
         st.success(
             f"""
-Model: {original_champion['Model']}
+Model: {champion['Model']}
 
-Version: {original_champion['Version']}
+Version: {champion['Version']}
 
-MAE: {original_champion['MAE']:.4f}
+MAE: {champion['MAE']:.4f}
 
-RMSE: {original_champion['RMSE']:.4f}
+RMSE: {champion['RMSE']:.4f}
 """
         )
+
 
 with champion_col2:
 
@@ -1372,25 +1383,31 @@ with champion_col2:
         "### Capped Dataset Champion"
     )
 
-    capped_champion = registry[
-        (registry["DatasetType"] == "Capped")
+    capped_champion = registry_data[
+        (registry_data["DatasetType"] == "Capped")
         &
-        (registry["Status"] == "Production")
+        (registry_data["Status"] == "Production")
     ]
 
-    if not capped_champion.empty:
+    if capped_champion.empty:
 
-        capped_champion = capped_champion.iloc[0]
+        st.warning(
+            "No Production champion found."
+        )
+
+    else:
+
+        champion = capped_champion.iloc[0]
 
         st.success(
             f"""
-Model: {capped_champion['Model']}
+Model: {champion['Model']}
 
-Version: {capped_champion['Version']}
+Version: {champion['Version']}
 
-MAE: {capped_champion['MAE']:.4f}
+MAE: {champion['MAE']:.4f}
 
-RMSE: {capped_champion['RMSE']:.4f}
+RMSE: {champion['RMSE']:.4f}
 """
         )
 
@@ -1404,10 +1421,10 @@ with rollback_col1:
         "### Original Rollback Readiness"
     )
 
-    original_retired = registry[
-        (registry["DatasetType"] == "Original")
+    original_retired = registry_data[
+        (registry_data["DatasetType"] == "Original")
         &
-        (registry["Status"] == "Retired")
+        (registry_data["Status"] == "Retired")
     ]
 
     if original_retired.empty:
@@ -1438,10 +1455,10 @@ with rollback_col2:
         "### Capped Rollback Readiness"
     )
 
-    capped_retired = registry[
-        (registry["DatasetType"] == "Capped")
+    capped_retired = registry_data[
+        (registry_data["DatasetType"] == "Capped")
         &
-        (registry["Status"] == "Retired")
+        (registry_data["Status"] == "Retired")
     ]
 
     if capped_retired.empty:
@@ -1468,12 +1485,12 @@ Version:
 
 st.info(
     """
-Champion = Current Production model
+Champion = Current Production model.
 
-Rollback Candidate = A previously Retired model that could
+Rollback Candidate = A previously retired model that could
 potentially be restored after governance review.
 
-This section is READ ONLY and performs no database updates.
+This section is read-only and performs no database updates.
 """
 )
 

@@ -107,12 +107,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.info(
+st.success(
     """
-    This dashboard is currently read-only.
+    Lifecycle governance is enabled.
 
-    It displays lifecycle recommendations but does not promote,
-    decline, retire, or otherwise modify any model.
+    Authorized reviewers can evaluate candidate models,
+    review governance evidence, and execute approved
+    lifecycle decisions. All governance actions are
+    tracked for auditability and traceability.
     """
 )
 
@@ -2862,6 +2864,8 @@ st.markdown(
 
 
 st.caption(
-    "Read-only lifecycle governance view. "
-    "No model status is changed by this page."
+    "Lifecycle governance decisions may update model status "
+    "within the model registry. All approved Promote, Decline, "
+    "Retire, and related lifecycle actions are recorded for "
+    "traceability and audit purposes."
 )

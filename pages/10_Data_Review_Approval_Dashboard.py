@@ -3650,36 +3650,27 @@ else:
 st.divider()
 
 
-st.subheader(
-    "Approval History"
-)
-
-
 approval_history = (
     load_approval_history(
-        selected_batch_id
+        selected_upload_batch_id
     )
 )
 
+if not approval_history.empty:
 
-if approval_history.empty:
+    st.divider()
 
-    st.info(
-        "No approval history exists for this upload."
+    st.subheader(
+        "Approval History"
     )
-
-else:
 
     st.dataframe(
         approval_history,
-        hide_index=True,
         use_container_width=True
     )
 
-
 st.caption(
-    "This Version 1 dashboard supports reconstruction, "
-    "search, filtering, automated quality review, export, "
-    "and approval. Record-level editing and ETL execution "
-    "will be added as controlled follow-on capabilities."
-)             
+    "This dashboard supports controlled ITT review, "
+    "quality validation, audit logging, approval workflows, "
+    "and preparation for downstream ETL processing."
+)          
