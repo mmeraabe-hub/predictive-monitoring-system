@@ -3647,12 +3647,9 @@ else:
 # APPROVAL HISTORY
 # ==================================================
 
-st.divider()
-
-
 approval_history = (
     load_approval_history(
-        selected_upload_batch_id
+        selected_batch_id
     )
 )
 
@@ -3671,6 +3668,6 @@ if not approval_history.empty:
 
 st.caption(
     "This dashboard supports controlled ITT review, "
-    "quality validation, audit logging, approval workflows, "
-    "and preparation for downstream ETL processing."
-)          
+    "data-quality validation, audit logging, approval "
+    "workflows, and preparation for downstream ETL processing."
+)       
