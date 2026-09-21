@@ -68,33 +68,69 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.subheader("Monitoring, Analytics, Governance and Automation Lifecycle")
+st.subheader("Platform Lifecycle")
 
-st.code(
-"""
-Upload ITT
-      ↓
-Quality Review
-      ↓
-Approval
-      ↓
-ETL / UPSERT
-      ↓
-Longitudinal Data Transformation
-      ↓
-Feature Engineering
-      ↓
-Forecast Model Training
-      ↓
-Model Testing and Evaluation
-      ↓
-Governance Recommendation
-      ↓
-Lifecycle Management
-      ↓
-Automation Monitoring
-"""
-)
+c1, c2, c3, c4 = st.columns(4)
+
+with c1:
+    st.info(
+        """
+        **Data Management**
+
+        • Upload ITT
+
+        • Quality Review
+
+        • Approval
+
+        • ETL / UPSERT
+        """
+    )
+
+with c2:
+    st.info(
+        """
+        **Analytics**
+
+        • Longitudinal Transformation
+
+        • Feature Engineering
+
+        • Forecasting
+
+        • Risk Classification
+        """
+    )
+
+with c3:
+    st.info(
+        """
+        **Governance**
+
+        • Model Evaluation
+
+        • Recommendations
+
+        • Drift Monitoring
+
+        • Lifecycle Decisions
+        """
+    )
+
+with c4:
+    st.info(
+        """
+        **Automation**
+
+        • Retraining Engine
+
+        • Governance Preview
+
+        • Audit Logging
+
+        • Monitoring Dashboard
+        """
+    )
 
 st.divider()
 
