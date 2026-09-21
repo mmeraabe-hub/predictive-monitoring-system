@@ -38,84 +38,168 @@ st.markdown(
 )
 st.markdown(
     '<div class="main-title">'
-    'AI-Enabled Predictive Monitoring and Early Warning System'
+    'AI-Enabled Predictive Monitoring and Learning System'
     '</div>',
     unsafe_allow_html=True
 )
+
 st.markdown(
     '<div class="subtitle">'
-    'Quarterly, annual, and life-of-project monitoring for '
-    'development project indicators'
+    'An integrated platform for predictive analytics, governance, '
+    'lifecycle management, automation, and organizational learning'
     '</div>',
     unsafe_allow_html=True
 )
+
 st.markdown(
     """
     <div class="info-card">
-    <strong>Purpose</strong><br>
-    This prototype transforms project ITT data into forward-looking
-    monitoring information. It supports quarterly monitoring,
-    annual trajectory assessment, life-of-project forecasting,
-    and early warning classification.
+    <strong>Platform Overview</strong><br>
+    This platform transforms traditional Indicator Tracking Table (ITT)
+    reporting into a governed, predictive, and automated Monitoring,
+    Evaluation, and Learning (MEL) environment.
+
+    The system supports the complete monitoring lifecycle including
+    data acquisition, review and approval, longitudinal transformation,
+    predictive analytics, model governance, lifecycle management,
+    and automation monitoring.
     </div>
     """,
     unsafe_allow_html=True
 )
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.subheader("Short-Term Monitoring")
-    st.write(
-        "Compare quarterly actual achievement with the "
-        "corresponding quarterly target."
-    )
-    st.info(
-        "Primary output: Quarter achievement percentage "
-        "and Quarter Status"
-    )
-with col2:
-    st.subheader("Medium-Term Monitoring")
-    st.write(
-        "Assess current annual progress and estimate the "
-        "year-end achievement ratio."
-    )
-    st.info(
-        "Primary output: Annual Forecast Ratio, "
-        "Annual Progress Gap, and Annual Status"
-    )
-with col3:
-    st.subheader("Long-Term Monitoring")
-    st.write(
-        "Assess cumulative progress and projected performance "
-        "against the life-of-project target."
-    )
-    st.info(
-        "Primary output: LoP Forecast Ratio, "
-        "LoP Progress Gap, and LoP Status"
-    )
+
+st.subheader("Monitoring, Analytics, Governance and Automation Lifecycle")
+
+st.code(
+"""
+Upload ITT
+      ↓
+Quality Review
+      ↓
+Approval
+      ↓
+ETL / UPSERT
+      ↓
+Longitudinal Data Transformation
+      ↓
+Feature Engineering
+      ↓
+Forecast Model Training
+      ↓
+Model Testing and Evaluation
+      ↓
+Governance Recommendation
+      ↓
+Lifecycle Management
+      ↓
+Automation Monitoring
+"""
+)
+
 st.divider()
-st.subheader("Prototype Modules")
+
+st.subheader("Core Platform Capabilities")
+
 st.markdown(
-    """
-    1. **Portfolio Dashboard**
-        Executive overview of projects, indicators, and risk status.
-    2. **Project Dashboard**
-        Detailed monitoring of each project and its priority indicators.
-    3. **Indicator Dashboard**
-        Quarterly, annual, and LoP performance with trend visualizations.
-    4. **Create and Update ITT**
-        Create projects and indicators and enter quarterly data periodically.
-    5. **Upload Existing ITT**
-        Import an existing standardized Excel ITT.
-    """
+"""
+✅ Upload and manage Indicator Tracking Tables (ITTs)
+
+✅ Review data quality and approve datasets
+
+✅ Perform ETL and UPSERT processing
+
+✅ Transform monitoring data into longitudinal analytical datasets
+
+✅ Generate predictive forecasts using multiple forecasting models
+
+✅ Support forecast verification and model evaluation
+
+✅ Provide risk classification and early-warning monitoring
+
+✅ Maintain model registries and governance records
+
+✅ Support candidate evaluation and recommendation workflows
+
+✅ Monitor model drift and governance readiness
+
+✅ Manage model lifecycle decisions including promotion and decline
+
+✅ Track champion models and rollback readiness
+
+✅ Execute retraining and governance automation workflows
+
+✅ Monitor automation history and audit trails
+"""
 )
+
+st.divider()
+
+st.subheader("Forecasting Framework")
+
+st.markdown(
+"""
+The platform supports a governed forecasting framework based on
+longitudinal project monitoring data and engineered analytical variables.
+
+Forecasting candidates include:
+
+- Naive Persistence
+- Linear Regression
+- Random Forest
+- XGBoost
+
+Models are evaluated using governance criteria and recommendation rules
+to identify suitable candidates for lifecycle review and monitoring.
+"""
+)
+
+st.divider()
+
+st.subheader("Governance and Lifecycle Management")
+
+st.markdown(
+"""
+The governance framework supports:
+
+- Model Registry Management
+- Candidate Evaluation
+- Governance Recommendations
+- Drift Monitoring
+- Champion Model Tracking
+- Lifecycle Decisions
+- Rollback Readiness Assessment
+"""
+)
+
+st.divider()
+
+st.subheader("Automation Services")
+
+st.markdown(
+"""
+Automation services support:
+
+- Retraining Engine
+- Governance Preview Engine
+- Automation Orchestrator
+- Automation Logger
+- Automation Monitoring Dashboard
+
+These services improve operational transparency,
+auditability, and governance oversight.
+"""
+)
+
 st.warning(
-    "Forecasts and risk classifications are decision-support signals. "
-    "They should be reviewed by MEL and program staff before management action."
+    "Forecasts, recommendations, governance results, and risk classifications "
+    "are decision-support outputs and should be reviewed by MEL, program, "
+    "and governance stakeholders before operational action."
 )
+
 st.markdown(
     '<div class="footer-note">'
-    'Prototype developed for an academic project on predictive '
-    'monitoring and adaptive learning.'
+    'Developed as part of a Master\'s project on AI-enabled predictive '
+    'monitoring, governance, automation, and organizational learning.'
     '</div>',
     unsafe_allow_html=True
 )
