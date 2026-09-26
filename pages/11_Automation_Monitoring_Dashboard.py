@@ -1322,13 +1322,22 @@ with governance_detail_col:
         st.error(
             error_message
         )
-# ============================================================
-# CHAMPION MODELS AND ROLLBACK READINESS
-# ============================================================
+try:
+    with sqlite3.connect(str(DB_FILE)) as conn:
+        registry_data = pd.read_sql_query(
+            """
+            SELECT *
+            FROM model_registry
+            """,
+            conn
+        )
+except Exception:
+    registry_data = pd.DataFrame() 
 
 # ============================================================
 # CHAMPION MODELS AND ROLLBACK READINESS
 # ============================================================
+
 
 st.divider()
 
