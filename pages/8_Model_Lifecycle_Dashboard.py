@@ -7,7 +7,13 @@ import pandas as pd
 import streamlit as st
 
 from utils.database_utils import DB_FILE
-
+from utils.approved_itt_etl_clean import (
+    get_candidate_dataset,
+    load_approved_batch,
+    transform_itt_to_longitudinal,
+    build_dashboard_features,
+    upsert_dashboard_data
+)
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -2271,7 +2277,188 @@ def execute_lifecycle_decision(
             )
 
         if action == "Promote":
+            # ==========================================
+            # FIND APPROVED DATASET FOR THIS CANDIDATE
+            # ==========================================
 
+            dataset_record = (
+                get_candidate_dataset(
+                    dataset_type=dataset_type,
+                    candidate_model=candidate_model,
+                    candidate_version=candidate_version,
+                    db_path=DB_FILE
+                )
+            )
+
+            upload_batch_id = (
+                dataset_record[
+                    "UploadBatchID"
+                ]
+            )
+                        # ==========================================
+            # LOAD APPROVED ITT
+            # ==========================================
+
+            batch_record, staged_rows = (
+                load_approved_batch(
+                    upload_batch_id
+                )
+            )
+
+            if staged_rows.empty:
+
+                raise RuntimeError(
+                    "The approved dataset contains "
+                    "no staged records."
+                )
+                            # ==========================================
+            # RECONSTRUCT APPROVED ITT
+            # ==========================================
+
+            reconstructed_records = []
+
+            for _, staged_row in (
+                staged_rows.iterrows()
+            ):
+
+                import json
+
+                record = json.loads(
+                    staged_row[
+                        "RecordJSON"
+                    ]
+                )
+
+                reconstructed_records.append(
+                    record
+                )
+
+            itt_df = pd.DataFrame(
+                reconstructed_records
+            )
+
+            if itt_df.empty:
+
+                raise RuntimeError(
+                    "The approved ITT could not "
+                    "be reconstructed."
+                )
+
+            # ==========================================
+            # BUILD LONGITUDINAL DATA
+            # ==========================================
+
+            longitudinal_df = (
+                transform_itt_to_longitudinal(
+                    itt_df
+                )
+            )
+
+            if longitudinal_df.empty:
+
+                raise RuntimeError(
+                    "Longitudinal transformation "
+                    "produced no records."
+                )
+
+            # ==========================================
+            # BUILD DASHBOARD DATASET
+            # ==========================================
+
+            candidate_dashboard_df = (
+                build_dashboard_features(
+                    longitudinal_df,
+                    itt_df
+                )
+            )
+            candidate_dashboard_df = (
+                build_dashboard_features(
+                    longitudinal_df,
+                    itt_df
+                )
+            )
+
+            duplicate_keys = (
+                candidate_dashboard_df
+                .duplicated(
+                    subset=[
+                        "Project",
+                        "IndicatorID",
+                        "Year",
+                        "Quarter"
+                    ]
+                )
+                .sum()
+            )
+
+            if duplicate_keys > 0:
+
+                raise RuntimeError(
+                    f"Candidate dataset contains "
+                    f"{duplicate_keys:,} duplicate "
+                    "Project-Indicator-Year-Quarter keys."
+                )
+
+            project_count = (
+                candidate_dashboard_df[
+                    "Project"
+                ].nunique()
+            )
+
+            indicator_count = (
+                candidate_dashboard_df[
+                    "IndicatorID"
+                ].nunique()
+            )
+
+            row_count = len(
+                candidate_dashboard_df
+            )
+            print(
+                "Candidate Dataset Summary"
+            )
+
+            print(
+                "Projects:",
+                project_count
+            )
+
+            print(
+                "Indicators:",
+                indicator_count
+            )
+
+            print(
+                "Rows:",
+                row_count
+            )
+
+            print(
+                "Duplicate Keys:",
+                duplicate_keys
+            )
+
+            if candidate_dashboard_df.empty:
+
+                raise RuntimeError(
+                    "Dashboard feature generation "
+                    "produced no records."
+                )
+
+            print(
+                "Lifecycle dataset:",
+                upload_batch_id
+            )
+            # ==========================================
+            # APPEND APPROVED PROJECT DATA
+            # ==========================================
+
+            upsert_result = (
+                upsert_dashboard_data(
+                    dashboard_df=candidate_dashboard_df,
+                    db_path=DB_FILE
+                )
+            )
             retired_update = conn.execute(
                 """
                 UPDATE model_registry
@@ -2448,6 +2635,18 @@ def execute_lifecycle_decision(
 
             "Action":
                 action,
+                
+            "UploadBatchID":
+                upload_batch_id,
+
+            "ProjectsLoaded":
+                project_count,
+
+            "IndicatorsLoaded":
+                indicator_count,
+
+            "RowsLoaded":
+                row_count,
 
             "ProductionBefore":
                 (
