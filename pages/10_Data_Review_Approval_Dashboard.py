@@ -133,7 +133,6 @@ initialize_review_tables()
 # DATA LOADING
 # ==================================================
 
-@st.cache_data
 def load_upload_batches():
 
     conn = sqlite3.connect(DB_FILE)
@@ -167,7 +166,6 @@ def load_upload_batches():
     return batches
 
 
-@st.cache_data
 def load_staged_rows(
     upload_batch_id
 ):
@@ -207,7 +205,6 @@ def load_staged_rows(
     return staged_rows
 
 
-@st.cache_data
 def load_approval_history(
     upload_batch_id
 ):
@@ -977,7 +974,6 @@ def create_staged_record_hash(
     ).hexdigest()
 
 
-@st.cache_data
 def load_change_history(
     upload_batch_id
 ):
