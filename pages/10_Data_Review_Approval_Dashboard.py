@@ -1,4 +1,4 @@
-import json
+﻿import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -8,13 +8,13 @@ import streamlit as st
 from utils.database_utils import DB_FILE
 
 
-# ==================================================
+# =
 # PAGE CONFIGURATION
-# ==================================================
+# =
 
 st.set_page_config(
     page_title="Data Review & Approval",
-    page_icon="✅",
+    page_icon="œ…",
     layout="wide"
 )
 
@@ -43,9 +43,9 @@ st.info(
 )
 
 
-# ==================================================
+# =
 # DATABASE INITIALIZATION
-# ==================================================
+# =
 
 def initialize_review_tables():
 
@@ -129,9 +129,9 @@ def initialize_review_tables():
 initialize_review_tables()
 
 
-# ==================================================
+# =
 # DATA LOADING
-# ==================================================
+# =
 
 def load_upload_batches():
 
@@ -243,9 +243,9 @@ def load_approval_history(
     return approval_history
 
 
-# ==================================================
+# =
 # HELPER FUNCTIONS
-# ==================================================
+# =
 
 def reconstruct_uploaded_itt(
     staged_rows
@@ -689,9 +689,9 @@ def update_batch_approval(
         conn.close()
 
 
-# ==================================================
+# =
 # EDITING AND AUDIT-LOG FOUNDATION
-# ==================================================
+# =
 
 def initialize_editing_tables():
 
@@ -1352,9 +1352,9 @@ def save_staged_record_changes(
 
 
 
-# ==================================================
+# =
 # LOAD UPLOAD BATCHES
-# ==================================================
+# =
 
 try:
 
@@ -1385,9 +1385,9 @@ if batches.empty:
     st.stop()
 
 
-# ==================================================
+# =
 # BATCH SELECTOR
-# ==================================================
+# =
 
 st.sidebar.header(
     "ITT Review Controls"
@@ -1433,9 +1433,9 @@ selected_batch = (
 )
 
 
-# ==================================================
+# =
 # BATCH SUMMARY
-# ==================================================
+# =
 
 st.subheader(
     "Selected Upload Summary"
@@ -1524,9 +1524,9 @@ else:
     )
 
 
-# ==================================================
+# =
 # LOAD AND RECONSTRUCT SELECTED ITT
-# ==================================================
+# =
 
 try:
 
@@ -1572,9 +1572,9 @@ if uploaded_itt.empty:
 quality_itt = create_quality_review(
     uploaded_itt
 )
-# ==================================================
+# =
 # DATA QUALITY SUMMARY CALCULATIONS
-# ==================================================
+# =
 
 missing_indicator_ids = int(
     quality_itt[
@@ -1611,9 +1611,9 @@ issue_rows = int(
         "_QualityIssueCount"
     ].gt(0).sum()
 )
-# ==================================================
+# =
 # CLICKABLE QUALITY SUMMARY
-# ==================================================
+# =
 
 if "quality_issue_filter" not in st.session_state:
 
@@ -1707,9 +1707,9 @@ st.info(
 )
 
 
-# ==================================================
+# =
 # SEARCH AND FILTERS
-# ==================================================
+# =
 
 st.divider()
 
@@ -1881,9 +1881,9 @@ include_structure_rows = st.toggle(
 )
 
 
-# ==================================================
+# =
 # APPLY SEARCH AND FILTERS
-# ==================================================
+# =
 
 filtered_itt = quality_itt.copy()
 quality_filter_map = {
@@ -2058,9 +2058,9 @@ if not include_structure_rows:
     ]
 
 
-# ==================================================
+# =
 # DISPLAY RECONSTRUCTED ITT
-# ==================================================
+# =
 
 st.divider()
 
@@ -2165,9 +2165,9 @@ st.download_button(
 )
 
 
-# ==================================================
+# =
 # BULK MISSING LOP TARGET CORRECTION
-# ==================================================
+# =
 
 st.divider()
 
@@ -2526,7 +2526,7 @@ else:
         if saved_records > 0:
 
             st.success(
-                f"✅ Saved {changed_fields:,} "
+                f"œ… Saved {changed_fields:,} "
                 f"LoP target correction(s) across "
                 f"{saved_records:,} record(s)."
             )
@@ -2572,9 +2572,9 @@ else:
 
 
 
-# ==================================================
+# =
 # BULK MISSING UNITS CORRECTION
-# ==================================================
+# =
 
 st.divider()
 
@@ -2980,7 +2980,7 @@ else:
         if units_saved_records > 0:
 
             st.success(
-                f"✅ Saved {units_changed_fields:,} "
+                f"œ… Saved {units_changed_fields:,} "
                 f"Unit of Measure correction(s) across "
                 f"{units_saved_records:,} record(s)."
             )
@@ -3037,9 +3037,9 @@ else:
             st.rerun()
 
 
-# ==================================================
+# =
 # RECORD EDITING AND AUDIT LOG
-# ==================================================
+# =
 
 st.divider()
 
@@ -3326,7 +3326,7 @@ else:
                     st.cache_data.clear()
 
                     st.success(
-                        "✅ "
+                        "œ… "
                         + save_result[
                             "Message"
                         ]
@@ -3456,9 +3456,9 @@ else:
 
 
 
-# ==================================================
+# =
 # APPROVAL WORKFLOW
-# ==================================================
+# =
 
 st.divider()
 
@@ -3614,61 +3614,61 @@ else:
                 upload_batch_id=selected_batch_id,
                 db_path=DB_FILE
             )
-<<<<<<< HEAD
-            st.cache_data.clear()
-� 
-            st.success(
-                "✅ Dataset approved and ETL completed."
-            )
-� 
-=======
 
             st.cache_data.clear()
+ 
+            st.success(
+                "œ… Dataset approved and ETL completed."
+            )
+ 
+
+
+            st.cache_data.clear()
 
             st.success(
-            "✅ Dataset approved and ETL completed."
+            "œ… Dataset approved and ETL completed."
             )
 
->>>>>>> 13ea5d4 (Connect approval workflow to ETL processing)
+
             st.write(
                 f"Dashboard rows after ETL: "
                 f"{etl_result['DashboardRowsAfter']:,}"
             )
-<<<<<<< HEAD
-� 
-=======
 
->>>>>>> 13ea5d4 (Connect approval workflow to ETL processing)
+ 
+
+
+
             st.write(
                 f"Projects after ETL: "
                 f"{etl_result['ProjectsAfter']:,}"
             )
-<<<<<<< HEAD
-� 
+
+ 
             st.rerun()
-� 
-=======
+ 
+
 
             st.rerun()
 
->>>>>>> 13ea5d4 (Connect approval workflow to ETL processing)
+
         except Exception as error:
-� 
+ 
             st.error(
                 "The dataset approval could not be saved."
             )
-<<<<<<< HEAD
-� 
-=======
 
->>>>>>> 13ea5d4 (Connect approval workflow to ETL processing)
+ 
+
+
+
             st.exception(
                 error
             )
 
-# ==================================================
+# =
 # APPROVAL HISTORY
-# ==================================================
+# =
 
 approval_history = (
     load_approval_history(
@@ -3694,3 +3694,6 @@ st.caption(
     "data-quality validation, audit logging, approval "
     "workflows, and preparation for downstream ETL processing."
 )       
+
+
+
