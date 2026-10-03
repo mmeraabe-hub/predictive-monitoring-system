@@ -2228,11 +2228,34 @@ if execute_button:
 
     except Exception as error:
 
-        st.error(
-            "The lifecycle decision could not be completed. "
-            "All database changes were rolled back."
-        )
+        if (
+            "already the current Original-track Production model"
+            in str(error)
+        ):
 
-        st.exception(
-            error
-        )
+            st.info(
+                """
+No Promotion Required
+
+The recommended model is already the active
+production model.
+
+Current Production Model:
+Naive Persistence v2.0
+
+A new candidate version must be generated through
+retraining before another promotion can occur.
+"""
+            )
+
+        else:
+
+            st.error(
+                "The lifecycle decision could not be completed. "
+                "All database changes were rolled back."
+            )
+
+            st.exception(
+                error
+            )
+    
