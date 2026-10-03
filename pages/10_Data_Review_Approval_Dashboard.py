@@ -1,4 +1,4 @@
-﻿import json
+import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.database_utils import DB_FILE
+from utils.approved_itt_etl_clean import process_approved_batch
 
 
 # =
@@ -14,7 +15,7 @@ from utils.database_utils import DB_FILE
 
 st.set_page_config(
     page_title="Data Review & Approval",
-    page_icon="œ…",
+    page_icon="D",
     layout="wide"
 )
 
@@ -2526,7 +2527,7 @@ else:
         if saved_records > 0:
 
             st.success(
-                f"œ… Saved {changed_fields:,} "
+                f"�� Saved {changed_fields:,} "
                 f"LoP target correction(s) across "
                 f"{saved_records:,} record(s)."
             )
@@ -2980,7 +2981,7 @@ else:
         if units_saved_records > 0:
 
             st.success(
-                f"œ… Saved {units_changed_fields:,} "
+                f"�� Saved {units_changed_fields:,} "
                 f"Unit of Measure correction(s) across "
                 f"{units_saved_records:,} record(s)."
             )
@@ -3326,7 +3327,7 @@ else:
                     st.cache_data.clear()
 
                     st.success(
-                        "œ… "
+                        "�� "
                         + save_result[
                             "Message"
                         ]
@@ -3616,17 +3617,9 @@ else:
             )
 
             st.cache_data.clear()
- 
-            st.success(
-                "œ… Dataset approved and ETL completed."
-            )
- 
-
-
-            st.cache_data.clear()
 
             st.success(
-            "œ… Dataset approved and ETL completed."
+            "?" Dataset approved and ETL completed."
             )
 
 
@@ -3646,10 +3639,7 @@ else:
 
  
             st.rerun()
- 
 
-
-            st.rerun()
 
 
         except Exception as error:
@@ -3657,8 +3647,6 @@ else:
             st.error(
                 "The dataset approval could not be saved."
             )
-
- 
 
 
 
@@ -3694,6 +3682,4 @@ st.caption(
     "data-quality validation, audit logging, approval "
     "workflows, and preparation for downstream ETL processing."
 )       
-
-
 
