@@ -414,9 +414,8 @@ with st.expander(
         use_container_width=True,
     )
 
-
 # ============================================================
-# PLACEHOLDER FOR NEXT SECTIONS
+# SECTION 2: MODEL TRAINING SUMMARY
 # ============================================================
 
 st.divider()
@@ -425,13 +424,196 @@ st.subheader(
     "2. Model Training Summary"
 )
 
-st.info(
-    "The next implementation step will compare the four "
-    "available models using the approved portfolio dataset "
-    "and display training records, test records, MAE, RMSE, "
-    "and ranking."
+st.caption(
+"The latest approved portfolio dataset is automatically "
+"used to retrain all available forecasting models. "
+"Performance is evaluated using actual test records and "
+"the recommended model is selected based on RMSE and MAE."
 )
 
+conn = sqlite3.connect(
+    DB_FILE
+)
+
+try:
+
+    model_performance = pd.read_sql_query(
+        """
+        SELECT *
+        FROM model_performance
+        """,
+        conn
+    )
+
+finally:
+
+    conn.close()
+
+if model_performance.empty:
+
+    st.warning(
+        "No model performance results available."
+    )
+
+else:
+    total_models = (
+        model_performance[
+            "Model"
+        ].nunique()
+    )
+
+    max_test_rows = int(
+        pd.to_numeric(
+            model_performance["TestRows"],
+            errors="coerce"
+    ).max()
+)
+
+    evaluation_date = str(
+        model_performance[
+            "EvaluationDate"
+        ].max()
+    )
+
+    recommended_models = int(
+        model_performance[
+            "IsRecommended"
+        ]
+        .fillna(False)
+        .astype(bool)
+        .sum()
+)
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Models Evaluated",
+        total_models
+    )
+
+    col2.metric(
+        "Test Records",
+        f"{max_test_rows:,}"
+    )
+
+    col3.metric(
+        "Evaluation Date",
+        evaluation_date
+    )
+
+    col4.metric(
+        "Recommended Models",
+        recommended_models
+    )
+
+    display_columns = [
+        "AnalysisTrack",
+        "Model",
+        "MAE",
+        "RMSE",
+        "MAE_Rank",
+        "RMSE_Rank"
+    ]
+
+    available_columns = [
+        c
+        for c in display_columns
+        if c in model_performance.columns
+    ]
+
+    st.dataframe(
+        model_performance[
+            available_columns
+        ].sort_values(
+            [
+                "AnalysisTrack",
+                "RMSE_Rank"
+            ]
+        ),
+        use_container_width=True,
+        hide_index=True
+    )
+    st.markdown(
+        "### Best Model by Analysis Track"
+    )
+
+    best_models = (
+        model_performance
+        .sort_values(
+            [
+                "AnalysisTrack",
+                "RMSE_Rank"
+            ]
+        )
+        .groupby(
+            "AnalysisTrack",
+            as_index=False
+        )
+        .first()
+    )
+
+    st.dataframe(
+        best_models[
+            [
+                "AnalysisTrack",
+                "Model",
+                "RMSE",
+                "MAE",
+                "GovernanceRank"
+            ]
+        ],
+        hide_index=True,
+        use_container_width=True
+    )
+    st.markdown(
+        "### Best Model by Analysis Track"
+    )
+
+    best_models = (
+        model_performance
+        .sort_values(
+            [
+                "AnalysisTrack",
+                "RMSE_Rank"
+            ]
+        )
+        .groupby(
+            "AnalysisTrack",
+            as_index=False
+        )
+        .first()
+    )
+
+    st.dataframe(
+        best_models[
+            [
+                "AnalysisTrack",
+                "Model",
+                "RMSE",
+                "MAE",
+                "GovernanceRank"
+            ]
+        ],
+        hide_index=True,
+        use_container_width=True
+    )
+    st.markdown(
+    """
+### Model Selection Process
+
+The approved portfolio dataset is used to retrain:
+
+- Naive Persistence
+- Linear Regression
+- Random Forest
+- XGBoost
+
+The recommended model is selected using:
+
+1. Lowest RMSE
+2. Lowest MAE
+"""
+)
 st.divider()
 
 st.subheader(
