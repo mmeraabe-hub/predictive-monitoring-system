@@ -3616,11 +3616,11 @@ else:
             )
 <<<<<<< HEAD
             st.cache_data.clear()
-Â 
+Â 
             st.success(
                 "âœ… Dataset approved and ETL completed."
             )
-Â 
+Â 
 =======
 
             st.cache_data.clear()
@@ -3635,7 +3635,7 @@ else:
                 f"{etl_result['DashboardRowsAfter']:,}"
             )
 <<<<<<< HEAD
-Â 
+Â 
 =======
 
 >>>>>>> 13ea5d4 (Connect approval workflow to ETL processing)
@@ -3644,21 +3644,21 @@ else:
                 f"{etl_result['ProjectsAfter']:,}"
             )
 <<<<<<< HEAD
-Â 
+Â 
             st.rerun()
-Â 
+Â 
 =======
 
             st.rerun()
 
 >>>>>>> 13ea5d4 (Connect approval workflow to ETL processing)
         except Exception as error:
-Â 
+Â 
             st.error(
                 "The dataset approval could not be saved."
             )
 <<<<<<< HEAD
-Â 
+Â 
 =======
 
 >>>>>>> 13ea5d4 (Connect approval workflow to ETL processing)
