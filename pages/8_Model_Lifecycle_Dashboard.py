@@ -110,6 +110,823 @@ def initialize_lifecycle_decision_log():
 
 
 initialize_lifecycle_decision_log()
+# ============================================================
+# CONTROLLED LIFECYCLE TRANSACTION HELPERS
+# ============================================================
+
+def sqlite_safe_value(
+    value
+):
+
+    if pd.isna(
+        value
+    ):
+        return None
+
+    if hasattr(
+        value,
+        "item"
+    ):
+        try:
+            return value.item()
+        except Exception:
+            pass
+
+    return value
+
+
+def load_original_production_model(
+    conn
+):
+
+    production_rows = conn.execute(
+        """
+        SELECT
+            Model,
+            Version
+        FROM model_registry
+        WHERE DatasetType = 'Original'
+          AND lower(trim(Status)) = 'production'
+        ORDER BY rowid DESC
+        """
+    ).fetchall()
+
+    if len(production_rows) != 1:
+        raise RuntimeError(
+            "The Original track must contain exactly "
+            "one Production model."
+        )
+
+    return {
+        "Model":
+            str(
+                production_rows[0][0]
+            ),
+
+        "Version":
+            str(
+                production_rows[0][1]
+            ),
+    }
+
+
+def load_recommended_original_candidate(
+    conn,
+    recommended_model
+):
+
+    candidate_rows = conn.execute(
+        """
+        SELECT
+            Model,
+            Version,
+            MAE,
+            RMSE
+        FROM model_registry
+        WHERE DatasetType = 'Original'
+          AND Model = ?
+          AND lower(trim(Status)) = 'candidate'
+        ORDER BY
+            TrainingDate DESC,
+            rowid DESC
+        LIMIT 1
+        """,
+        (
+            recommended_model,
+        ),
+    ).fetchall()
+
+    if not candidate_rows:
+        raise RuntimeError(
+            "No Original-track Candidate version exists "
+            "for the recommended model."
+        )
+
+    return {
+        "Model":
+            str(
+                candidate_rows[0][0]
+            ),
+
+        "Version":
+            str(
+                candidate_rows[0][1]
+            ),
+
+        "MAE":
+            candidate_rows[0][2],
+
+        "RMSE":
+            candidate_rows[0][3],
+    }
+
+
+def upsert_dashboard_data_in_transaction(
+    conn,
+    dashboard_df
+):
+
+    if dashboard_df is None:
+        raise ValueError(
+            "dashboard_df cannot be None."
+        )
+
+    if dashboard_df.empty:
+        raise ValueError(
+            "dashboard_df contains no records."
+        )
+
+    incoming_data = (
+        dashboard_df.copy()
+    )
+
+    key_columns = [
+        "Project",
+        "IndicatorID",
+        "Year",
+        "Quarter",
+    ]
+
+    missing_keys = [
+        column
+        for column in key_columns
+        if column not in incoming_data.columns
+    ]
+
+    if missing_keys:
+        raise ValueError(
+            "Required dashboard key columns are missing: "
+            + ", ".join(
+                missing_keys
+            )
+        )
+
+    incoming_data["Project"] = (
+        incoming_data["Project"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    incoming_data["IndicatorID"] = (
+        incoming_data["IndicatorID"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    incoming_data["Year"] = pd.to_numeric(
+        incoming_data["Year"],
+        errors="raise",
+    ).astype(int)
+
+    incoming_data["Quarter"] = pd.to_numeric(
+        incoming_data["Quarter"],
+        errors="raise",
+    ).astype(int)
+
+    if incoming_data["Project"].eq("").any():
+        raise ValueError(
+            "Incoming data contains empty Project values."
+        )
+
+    if incoming_data["IndicatorID"].eq("").any():
+        raise ValueError(
+            "Incoming data contains empty IndicatorID values."
+        )
+
+    incoming_duplicates = int(
+        incoming_data.duplicated(
+            subset=key_columns,
+            keep=False,
+        ).sum()
+    )
+
+    if incoming_duplicates > 0:
+        raise ValueError(
+            "The approved dataset contains "
+            f"{incoming_duplicates:,} duplicate "
+            "Project–Indicator–Year–Quarter keys."
+        )
+
+    table_exists = conn.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = 'dashboard_data'
+        """
+    ).fetchone()
+
+    if table_exists is None:
+        raise RuntimeError(
+            "dashboard_data does not exist."
+        )
+
+    existing_columns = [
+        row[1]
+        for row in conn.execute(
+            """
+            PRAGMA table_info(
+                dashboard_data
+            )
+            """
+        ).fetchall()
+    ]
+
+    incoming_columns = (
+        incoming_data.columns.tolist()
+    )
+
+    if existing_columns != incoming_columns:
+        raise RuntimeError(
+            "The incoming dashboard schema does not match "
+            "dashboard_data. "
+            f"Existing columns: {len(existing_columns)}; "
+            f"incoming columns: {len(incoming_columns)}."
+        )
+
+    rows_before = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM dashboard_data
+        """
+    ).fetchone()[0]
+
+    projects_before = conn.execute(
+        """
+        SELECT COUNT(DISTINCT Project)
+        FROM dashboard_data
+        """
+    ).fetchone()[0]
+
+    delete_sql = """
+        DELETE FROM dashboard_data
+        WHERE Project = ?
+          AND IndicatorID = ?
+          AND Year = ?
+          AND Quarter = ?
+    """
+
+    delete_keys = [
+        tuple(
+            sqlite_safe_value(
+                value
+            )
+            for value in row
+        )
+        for row in incoming_data[
+            key_columns
+        ].itertuples(
+            index=False,
+            name=None,
+        )
+    ]
+
+    matching_rows_replaced = 0
+
+    for key in delete_keys:
+
+        matching_rows_replaced += int(
+            conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM dashboard_data
+                WHERE Project = ?
+                  AND IndicatorID = ?
+                  AND Year = ?
+                  AND Quarter = ?
+                """,
+                key,
+            ).fetchone()[0]
+        )
+
+    conn.executemany(
+        delete_sql,
+        delete_keys,
+    )
+
+    quoted_columns = ", ".join(
+        f'"{column}"'
+        for column in incoming_columns
+    )
+
+    placeholders = ", ".join(
+        ["?"] * len(
+            incoming_columns
+        )
+    )
+
+    insert_sql = (
+        'INSERT INTO "dashboard_data" '
+        f"({quoted_columns}) "
+        f"VALUES ({placeholders})"
+    )
+
+    insert_rows = [
+        tuple(
+            sqlite_safe_value(
+                value
+            )
+            for value in row
+        )
+        for row in incoming_data.itertuples(
+            index=False,
+            name=None,
+        )
+    ]
+
+    conn.executemany(
+        insert_sql,
+        insert_rows,
+    )
+
+    duplicate_keys_after = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM (
+            SELECT
+                Project,
+                IndicatorID,
+                Year,
+                Quarter,
+                COUNT(*) AS RecordCount
+            FROM dashboard_data
+            GROUP BY
+                Project,
+                IndicatorID,
+                Year,
+                Quarter
+            HAVING COUNT(*) > 1
+        )
+        """
+    ).fetchone()[0]
+
+    if duplicate_keys_after > 0:
+        raise RuntimeError(
+            "Post-promotion validation found "
+            f"{duplicate_keys_after:,} duplicate keys."
+        )
+
+    rows_after = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM dashboard_data
+        """
+    ).fetchone()[0]
+
+    projects_after = conn.execute(
+        """
+        SELECT COUNT(DISTINCT Project)
+        FROM dashboard_data
+        """
+    ).fetchone()[0]
+
+    expected_rows = (
+        rows_before
+        - matching_rows_replaced
+        + len(
+            incoming_data
+        )
+    )
+
+    if rows_after != expected_rows:
+        raise RuntimeError(
+            "Dashboard row validation failed. "
+            f"Expected {expected_rows:,} records but "
+            f"found {rows_after:,}."
+        )
+
+    return {
+        "InsertedRows":
+            len(
+                incoming_data
+            ),
+
+        "MatchingRowsReplaced":
+            matching_rows_replaced,
+
+        "RowsBefore":
+            rows_before,
+
+        "RowsAfter":
+            rows_after,
+
+        "ProjectsBefore":
+            projects_before,
+
+        "ProjectsAfter":
+            projects_after,
+
+        "LoadedProjects":
+            sorted(
+                incoming_data[
+                    "Project"
+                ]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            ),
+    }
+
+
+def execute_governance_decision(
+    action,
+    reviewer_name,
+    decision_reason,
+    approved_summary,
+    recommended
+):
+
+    reviewer_name = str(
+        reviewer_name
+    ).strip()
+
+    decision_reason = str(
+        decision_reason
+    ).strip()
+
+    if action not in [
+        "Promote Model",
+        "Decline Recommendation",
+    ]:
+        raise ValueError(
+            "Select Promote Model or "
+            "Decline Recommendation."
+        )
+
+    if not reviewer_name:
+        raise ValueError(
+            "Reviewer Name is required."
+        )
+
+    if not decision_reason:
+        raise ValueError(
+            "Decision Rationale is required."
+        )
+
+    upload_batch_id = str(
+        approved_summary[
+            "UploadBatchID"
+        ]
+    )
+
+    recommended_model = str(
+        recommended[
+            "Model"
+        ]
+    )
+
+    recommended_mae = float(
+        recommended[
+            "MAE"
+        ]
+    )
+
+    recommended_rmse = float(
+        recommended[
+            "RMSE"
+        ]
+    )
+
+    decision_timestamp = datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    conn = sqlite3.connect(
+        DB_FILE
+    )
+
+    try:
+
+        conn.execute(
+            "BEGIN IMMEDIATE"
+        )
+
+        production_before = (
+            load_original_production_model(
+                conn
+            )
+        )
+
+        candidate = (
+            load_recommended_original_candidate(
+                conn=conn,
+                recommended_model=(
+                    recommended_model
+                ),
+            )
+        )
+
+        dashboard_result = {
+            "RowsBefore":
+                conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM dashboard_data
+                    """
+                ).fetchone()[0],
+
+            "RowsAfter":
+                conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM dashboard_data
+                    """
+                ).fetchone()[0],
+
+            "ProjectsBefore":
+                conn.execute(
+                    """
+                    SELECT COUNT(DISTINCT Project)
+                    FROM dashboard_data
+                    """
+                ).fetchone()[0],
+
+            "ProjectsAfter":
+                conn.execute(
+                    """
+                    SELECT COUNT(DISTINCT Project)
+                    FROM dashboard_data
+                    """
+                ).fetchone()[0],
+
+            "InsertedRows":
+                0,
+
+            "MatchingRowsReplaced":
+                0,
+
+            "LoadedProjects":
+                [],
+        }
+
+        if action == "Promote Model":
+
+            dashboard_result = (
+                upsert_dashboard_data_in_transaction(
+                    conn=conn,
+                    dashboard_df=(
+                        approved_summary[
+                            "DashboardData"
+                        ]
+                    ),
+                )
+            )
+
+            retired_update = conn.execute(
+                """
+                UPDATE model_registry
+                SET Status = 'Retired'
+                WHERE DatasetType = 'Original'
+                  AND Model = ?
+                  AND Version = ?
+                  AND lower(trim(Status)) = 'production'
+                """,
+                (
+                    production_before[
+                        "Model"
+                    ],
+                    production_before[
+                        "Version"
+                    ],
+                ),
+            )
+
+            if retired_update.rowcount != 1:
+                raise RuntimeError(
+                    "The current Original production model "
+                    "could not be retired safely."
+                )
+
+            promoted_update = conn.execute(
+                """
+                UPDATE model_registry
+                SET Status = 'Production'
+                WHERE DatasetType = 'Original'
+                  AND Model = ?
+                  AND Version = ?
+                  AND lower(trim(Status)) = 'candidate'
+                """,
+                (
+                    candidate[
+                        "Model"
+                    ],
+                    candidate[
+                        "Version"
+                    ],
+                ),
+            )
+
+            if promoted_update.rowcount != 1:
+                raise RuntimeError(
+                    "The recommended Candidate could not "
+                    "be promoted safely."
+                )
+
+            production_after = {
+                "Model":
+                    candidate[
+                        "Model"
+                    ],
+
+                "Version":
+                    candidate[
+                        "Version"
+                    ],
+            }
+
+            audit_action = (
+                "Promote"
+            )
+
+        else:
+
+            declined_update = conn.execute(
+                """
+                UPDATE model_registry
+                SET Status = 'Declined'
+                WHERE DatasetType = 'Original'
+                  AND Model = ?
+                  AND Version = ?
+                  AND lower(trim(Status)) = 'candidate'
+                """,
+                (
+                    candidate[
+                        "Model"
+                    ],
+                    candidate[
+                        "Version"
+                    ],
+                ),
+            )
+
+            if declined_update.rowcount != 1:
+                raise RuntimeError(
+                    "The recommended Candidate could not "
+                    "be declined safely."
+                )
+
+            production_after = (
+                production_before.copy()
+            )
+
+            audit_action = (
+                "Decline"
+            )
+
+        final_production_rows = conn.execute(
+            """
+            SELECT
+                Model,
+                Version
+            FROM model_registry
+            WHERE DatasetType = 'Original'
+              AND lower(trim(Status)) = 'production'
+            """
+        ).fetchall()
+
+        if len(
+            final_production_rows
+        ) != 1:
+            raise RuntimeError(
+                "The Original track must contain exactly "
+                "one Production model after the decision."
+            )
+
+        if (
+            str(
+                final_production_rows[0][0]
+            )
+            != production_after[
+                "Model"
+            ]
+            or
+            str(
+                final_production_rows[0][1]
+            )
+            != production_after[
+                "Version"
+            ]
+        ):
+            raise RuntimeError(
+                "Post-decision production-model "
+                "verification failed."
+            )
+
+        conn.execute(
+            """
+            INSERT INTO model_lifecycle_decision_log (
+                DecisionTimestampUTC,
+                UploadBatchID,
+                Action,
+                DatasetType,
+                RecommendedModel,
+                ReviewerName,
+                DecisionReason,
+                TransactionStatus
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                decision_timestamp,
+                upload_batch_id,
+                audit_action,
+                "Original",
+                recommended_model,
+                reviewer_name,
+                decision_reason,
+                "Completed",
+            ),
+        )
+
+        conn.commit()
+
+        return {
+            "Action":
+                audit_action,
+
+            "UploadBatchID":
+                upload_batch_id,
+
+            "ProductionBefore":
+                (
+                    production_before[
+                        "Model"
+                    ]
+                    + " "
+                    + production_before[
+                        "Version"
+                    ]
+                ),
+
+            "RecommendedCandidate":
+                (
+                    candidate[
+                        "Model"
+                    ]
+                    + " "
+                    + candidate[
+                        "Version"
+                    ]
+                ),
+
+            "ProductionAfter":
+                (
+                    production_after[
+                        "Model"
+                    ]
+                    + " "
+                    + production_after[
+                        "Version"
+                    ]
+                ),
+
+            "DashboardRowsBefore":
+                dashboard_result[
+                    "RowsBefore"
+                ],
+
+            "DashboardRowsAfter":
+                dashboard_result[
+                    "RowsAfter"
+                ],
+
+            "ProjectsBefore":
+                dashboard_result[
+                    "ProjectsBefore"
+                ],
+
+            "ProjectsAfter":
+                dashboard_result[
+                    "ProjectsAfter"
+                ],
+
+            "LoadedProjects":
+                dashboard_result[
+                    "LoadedProjects"
+                ],
+
+            "TimestampUTC":
+                decision_timestamp,
+
+            "Status":
+                "Completed",
+        }
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        conn.close()
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -1136,3 +1953,183 @@ No production changes will occur until a governance
 decision is approved.
 """
     )
+    # ============================================================
+# SECTION 7: EXECUTION AUTHORIZATION
+# ============================================================
+
+st.divider()
+
+st.subheader(
+    "7. Execution Authorization"
+)
+
+st.caption(
+    "Production lifecycle actions require reviewer "
+    "authorization before execution."
+)
+
+authorization_confirmed = st.checkbox(
+    "I understand that this action may affect production monitoring data and forecasting outputs."
+)
+
+authorization_text = st.text_input(
+    "Confirmation Statement",
+    placeholder="Type: APPROVE EXECUTION"
+)
+
+execution_ready = (
+    reviewer_name.strip() != ""
+    and decision_reason.strip() != ""
+    and authorization_confirmed
+    and authorization_text.strip() == "APPROVE EXECUTION"
+    and decision_choice != "No Action"
+)
+
+st.markdown(
+    "### Authorization Status"
+)
+
+if execution_ready:
+
+    st.success(
+        """
+Authorization Complete
+
+The lifecycle decision has been reviewed and is
+ready for execution.
+"""
+    )
+
+else:
+
+    st.warning(
+        """
+Execution requirements are not yet complete.
+
+Required:
+
+• Reviewer Name
+
+• Decision Rationale
+
+• Lifecycle Decision Selection
+
+• Authorization Checkbox
+
+• Confirmation Statement
+"""
+    )
+
+execute_button = st.button(
+    "Execute Lifecycle Decision",
+    type="primary",
+    disabled=not execution_ready
+)
+# ============================================================
+# SECTION 7: EXECUTION AUTHORIZATION
+# ============================================================
+
+st.divider()
+
+st.subheader(
+    "7. Execution Authorization"
+)
+
+st.caption(
+    "Production lifecycle actions require reviewer "
+    "authorization before execution."
+)
+
+authorization_confirmed = st.checkbox(
+    "I understand that this action may affect production monitoring data and forecasting outputs."
+)
+
+authorization_text = st.text_input(
+    "Confirmation Statement",
+    placeholder="Type: APPROVE EXECUTION"
+)
+
+execution_ready = (
+    reviewer_name.strip() != ""
+    and decision_reason.strip() != ""
+    and authorization_confirmed
+    and authorization_text.strip() == "APPROVE EXECUTION"
+    and decision_choice != "No Action"
+)
+
+st.markdown(
+    "### Authorization Status"
+)
+
+if execution_ready:
+
+    st.success(
+        """
+Authorization Complete
+
+The lifecycle decision has been reviewed and is
+ready for execution.
+"""
+    )
+
+else:
+
+    st.warning(
+        """
+Execution requirements are not yet complete.
+
+Required:
+
+• Reviewer Name
+
+• Decision Rationale
+
+• Lifecycle Decision Selection
+
+• Authorization Checkbox
+
+• Confirmation Statement
+"""
+    )
+
+execute_button = st.button(
+    "Execute Lifecycle Decision",
+    type="primary",
+    disabled=not execution_ready
+)
+if execute_button:
+
+    try:
+
+        execution_result = (
+            execute_governance_decision(
+                action=decision_choice,
+                reviewer_name=reviewer_name,
+                decision_reason=decision_reason,
+                approved_summary=approved_summary,
+                recommended=recommended,
+            )
+        )
+
+        st.success(
+            "The lifecycle decision was executed "
+            "successfully."
+        )
+
+        st.json(
+            execution_result
+        )
+
+        st.cache_data.clear()
+
+    except Exception as error:
+
+        st.error(
+            "The lifecycle decision could not be "
+            "completed. All database changes were "
+            "rolled back."
+        )
+
+        st.exception(
+            error
+        )
