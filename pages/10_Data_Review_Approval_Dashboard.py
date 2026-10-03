@@ -3612,32 +3612,37 @@ else:
                 issue_rows=issue_rows
             )
 
-
+            etl_result = process_approved_batch(
+                upload_batch_id=selected_batch_id,
+                db_path=DB_FILE
+            )
             st.cache_data.clear()
-
-
+ 
             st.success(
-                "✅ The selected ITT upload was approved."
+                "✅ Dataset approved and ETL completed."
             )
-
-
-            st.info(
-                "Approval is complete. ETL has not yet "
-                "run automatically."
+ 
+            st.write(
+                f"Dashboard rows after ETL: "
+                f"{etl_result['DashboardRowsAfter']:,}"
             )
-
-
+ 
+            st.write(
+                f"Projects after ETL: "
+                f"{etl_result['ProjectsAfter']:,}"
+            )
+ 
             st.rerun()
-
-
+ 
         except Exception as error:
-
+ 
             st.error(
                 "The dataset approval could not be saved."
             )
-
-            st.exception(error)
-
+ 
+            st.exception(
+                error
+            )
 
 # ==================================================
 # APPROVAL HISTORY
