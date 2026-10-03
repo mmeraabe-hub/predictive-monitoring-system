@@ -860,102 +860,90 @@ def build_dashboard_features(long_df, itt_df=None):
     ].copy()
 
     return df
-def upsert_dashboard_data(
-    dashboard_df,
+
+def get_candidate_dataset(
+    dataset_type,
+    candidate_model,
+    candidate_version,
     db_path="predictive_monitoring.db"
 ):
-
-    import sqlite3
-    import pandas as pd
 
     conn = sqlite3.connect(
         db_path
     )
 
-    cursor = conn.cursor()
+    try:
 
-    # ----------------------------------------
-    # Create dashboard table if needed
-    # ----------------------------------------
+        record = pd.read_sql_query(
+            '''
+            SELECT *
+            FROM approved_dataset_registry
+            WHERE DatasetType = ?
+              AND CandidateModel = ?
+              AND CandidateVersion = ?
+            ORDER BY RegistryID DESC
+            LIMIT 1
+            ''',
+            conn,
+            params=[
+                dataset_type,
+                candidate_model,
+                candidate_version
+            ]
+        )
 
-    dashboard_df.head(0).to_sql(
-        "dashboard_data",
-        conn,
-        if_exists="replace",
-        index=False
+    finally:
+
+        conn.close()
+
+    if record.empty:
+
+        return None
+
+    return record.iloc[0].to_dict()
+
+
+def upsert_dashboard_data(
+    dashboard_df,
+    db_path="predictive_monitoring.db"
+):
+
+    if dashboard_df is None:
+        raise ValueError(
+            "dashboard_df cannot be None."
+        )
+
+    if dashboard_df.empty:
+        raise ValueError(
+            "dashboard_df contains no rows."
+        )
+
+    conn = sqlite3.connect(
+        db_path
     )
-
-    # ----------------------------------------
-    # Load existing table
-    # ----------------------------------------
 
     try:
 
-        existing_df = pd.read_sql(
-            """
-            SELECT *
-            FROM dashboard_data
-            """,
-            conn
+        dashboard_df.to_sql(
+            "dashboard_data",
+            conn,
+            if_exists="replace",
+            index=False
         )
 
-    except:
+        conn.commit()
 
-        existing_df = pd.DataFrame()
+        return {
+            "TotalRows":
+                len(dashboard_df),
 
-    # ----------------------------------------
-    # Append and deduplicate
-    # ----------------------------------------
+            "ProjectCount":
+                dashboard_df[
+                    "Project"
+                ].nunique()
+        }
 
-    combined_df = pd.concat(
-        [
-            existing_df,
-            dashboard_df
-        ],
-        ignore_index=True
-    )
+    finally:
 
-    combined_df = (
-        combined_df
-        .sort_values(
-            [
-                "Project",
-                "IndicatorID",
-                "Year",
-                "Quarter"
-            ]
-        )
-        .drop_duplicates(
-            subset=[
-                "Project",
-                "IndicatorID",
-                "Year",
-                "Quarter"
-            ],
-            keep="last"
-        )
-        .reset_index(drop=True)
-    )
+        conn.close()
 
-    # ----------------------------------------
-    # Replace dashboard table
-    # ----------------------------------------
-
-    combined_df.to_sql(
-        "dashboard_data",
-        conn,
-        if_exists="replace",
-        index=False
-    )
-
-    conn.commit()
-
-    row_count = len(combined_df)
-
-    conn.close()
-
-    print(
-        f"dashboard_data updated: {row_count:,} rows"
-    )
-
-    return combined_df
