@@ -933,20 +933,32 @@ def execute_governance_decision(
                 "verification failed."
             )
 
-        conn.execute(
+            conn.execute(
             """
             INSERT INTO model_lifecycle_decision_log (
                 DecisionTimestampUTC,
                 UploadBatchID,
                 Action,
                 DatasetType,
+                ProductionModelBefore,
+                ProductionVersionBefore,
                 RecommendedModel,
+                RecommendedVersion,
+                RecommendedMAE,
+                RecommendedRMSE,
                 ReviewerName,
                 DecisionReason,
+                ProductionModelAfter,
+                ProductionVersionAfter,
+                DashboardRowsBefore,
+                DashboardRowsAfter,
+                ProjectsBefore,
+                ProjectsAfter,
                 TransactionStatus
             )
             VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -954,9 +966,58 @@ def execute_governance_decision(
                 upload_batch_id,
                 audit_action,
                 "Original",
-                recommended_model,
+
+                production_before[
+                    "Model"
+                ],
+
+                production_before[
+                    "Version"
+                ],
+
+                candidate[
+                    "Model"
+                ],
+
+                candidate[
+                    "Version"
+                ],
+
+                candidate[
+                    "MAE"
+                ],
+
+                candidate[
+                    "RMSE"
+                ],
+
                 reviewer_name,
                 decision_reason,
+
+                production_after[
+                    "Model"
+                ],
+
+                production_after[
+                    "Version"
+                ],
+
+                dashboard_result[
+                    "RowsBefore"
+                ],
+
+                dashboard_result[
+                    "RowsAfter"
+                ],
+
+                dashboard_result[
+                    "ProjectsBefore"
+                ],
+
+                dashboard_result[
+                    "ProjectsAfter"
+                ],
+
                 "Completed",
             ),
         )
