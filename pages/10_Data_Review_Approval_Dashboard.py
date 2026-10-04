@@ -1,4 +1,4 @@
-import json
+﻿import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -2527,7 +2527,7 @@ else:
         if saved_records > 0:
 
             st.success(
-                f" Saved {changed_fields:,} "
+                f"Saved {changed_fields:,} "
                 f"LoP target correction(s) across "
                 f"{saved_records:,} record(s)."
             )
@@ -2981,7 +2981,7 @@ else:
         if units_saved_records > 0:
 
             st.success(
-                f" Saved {units_changed_fields:,} "
+                f"Saved {units_changed_fields:,} "
                 f"Unit of Measure correction(s) across "
                 f"{units_saved_records:,} record(s)."
             )
@@ -3327,7 +3327,7 @@ else:
                     st.cache_data.clear()
 
                     st.success(
-                        " "
+                        "œ… "
                         + save_result[
                             "Message"
                         ]
@@ -3475,6 +3475,7 @@ current_status = str(
     ]
 )
 
+
 if current_status == "Approved":
 
     st.success(
@@ -3495,7 +3496,7 @@ if current_status == "Approved":
         ]
     )
 
-if pd.notna(
+    if pd.notna(
         selected_batch[
             "ReviewNotes"
         ]
@@ -3508,9 +3509,8 @@ if pd.notna(
             ]
         )
 
-else:
 
-    st.markdown("### Final Reviewer Approval")
+else:
 
     if issue_rows > 0:
 
@@ -3535,6 +3535,7 @@ else:
         )
     )
 
+
     review_notes = st.text_area(
         "Review notes",
         placeholder=(
@@ -3543,24 +3544,31 @@ else:
         )
     )
 
+
     review_confirmation = st.checkbox(
-        "I confirm that I reviewed this uploaded ITT, "
-        "verified any edits made, and approve this dataset "
-        "for ETL processing."
+        "I confirm that I reviewed this uploaded ITT "
+        "and understand that approval makes it eligible "
+        "for the controlled ETL step."
     )
+
 
     unresolved_issue_confirmation = False
 
+
     if issue_rows > 0:
 
-        unresolved_issue_confirmation = st.checkbox(
-            "I reviewed the automated quality flags and "
-            "accept any remaining flagged records."
+        unresolved_issue_confirmation = (
+            st.checkbox(
+                "I reviewed the automated quality flags "
+                "and accept the remaining flagged records "
+                "for approval."
+            )
         )
 
     else:
 
         unresolved_issue_confirmation = True
+
 
     approval_disabled = not (
         approved_by.strip()
@@ -3568,25 +3576,40 @@ else:
         and unresolved_issue_confirmation
     )
 
+
     approve_button = st.button(
-        "Approve Dataset and Continue to ETL",
+        "Approve Selected Dataset",
         type="primary",
         disabled=approval_disabled,
         key="approve_selected_batch"
     )
-
     if approve_button:
 
         try:
 
             update_batch_approval(
-                upload_batch_id=selected_batch_id,
-                previous_status=current_status,
-                approved_by=approved_by.strip(),
-                review_notes=review_notes.strip(),
-                reviewed_rows=len(quality_itt),
-                issue_rows=issue_rows
-            )
+                upload_batch_id=(
+                selected_batch_id
+            ),
+            file_name=str(
+                selected_batch[
+                    "FileName"
+                ]
+            ),
+            previous_status=(
+                current_status
+            ),
+            approved_by=(
+                approved_by.strip()
+            ),
+            review_notes=(
+                review_notes.strip()
+            ),
+            reviewed_rows=len(
+                quality_itt
+            ),
+            issue_rows=issue_rows
+        )
 
             etl_result = process_approved_batch(
                 upload_batch_id=selected_batch_id,
@@ -3596,25 +3619,69 @@ else:
             st.cache_data.clear()
 
             st.success(
-                "Dataset approved and ETL completed."
+            "Dataset approved and ETL completed."
             )
+
 
             st.write(
                 f"Dashboard rows after ETL: "
                 f"{etl_result['DashboardRowsAfter']:,}"
             )
 
+ 
+
+
+
             st.write(
                 f"Projects after ETL: "
                 f"{etl_result['ProjectsAfter']:,}"
             )
 
+ 
             st.rerun()
 
-        except Exception as error:
 
+
+        except Exception as error:
+ 
             st.error(
                 "The dataset approval could not be saved."
             )
 
-            st.exception(error)
+
+
+            st.exception(
+                error
+            )
+
+# =
+# APPROVAL HISTORY
+# =
+
+approval_history = (
+    load_approval_history(
+        selected_batch_id
+    )
+)
+
+if not approval_history.empty:
+
+    st.divider()
+
+    st.subheader(
+        "Approval History"
+    )
+
+    st.dataframe(
+        approval_history,
+        use_container_width=True
+    )
+
+st.caption(
+    "This dashboard supports controlled ITT review, "
+    "data-quality validation, audit logging, approval "
+    "workflows, and preparation for downstream ETL processing."
+)       
+
+
+
