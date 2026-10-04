@@ -782,15 +782,51 @@ def execute_governance_decision(
 
         if action == "Promote Model":
 
+            staging_dashboard = pd.read_sql_query(
+                """
+                SELECT *
+                FROM dashboard_data_staging
+                """,
+                conn
+            )
+
+            if staging_dashboard.empty:
+                raise RuntimeError(
+                    "No candidate dataset exists in dashboard_data_staging."
+                )
+
             dashboard_result = (
                 upsert_dashboard_data_in_transaction(
                     conn=conn,
-                    dashboard_df=(
-                        approved_summary[
-                            "DashboardData"
-                        ]
-                    ),
+                    dashboard_df=staging_dashboard,
                 )
+            )
+
+            model_performance_staging = pd.read_sql_query(
+                """
+                SELECT *
+                FROM model_performance_staging
+                """,
+                conn
+            )
+
+            if model_performance_staging.empty:
+                raise RuntimeError(
+                    "No candidate model results exist in model_performance_staging."
+                )
+
+            model_performance_staging.to_sql(
+                "model_performance",
+                conn,
+                if_exists="replace",
+                index=False
+            )
+
+            conn.execute(
+                """
+                UPDATE training_run_staging
+                SET Status = 'Promoted'
+                """
             )
 
             retired_update = conn.execute(
