@@ -79,7 +79,7 @@ def transform_itt_to_longitudinal(
 ):
     """
     Convert wide ITT rows into
-    Project Ã— Indicator Ã— Quarter rows.
+    Project × Indicator × Quarter rows.
     """
 
     records = []
@@ -901,6 +901,8 @@ def get_candidate_dataset(
         return None
 
     return record.iloc[0].to_dict()
+
+
 def upsert_dashboard_data(
     dashboard_df,
     db_path="predictive_monitoring.db"
@@ -946,57 +948,9 @@ def upsert_dashboard_data(
         conn.close()
 
 
-def upsert_dashboard_data_staging(
-    dashboard_df,
-    db_path="predictive_monitoring.db"
-):
-
-    if dashboard_df is None:
-        raise ValueError(
-            "dashboard_df cannot be None."
-        )
-
-    if dashboard_df.empty:
-        raise ValueError(
-            "dashboard_df contains no rows."
-        )
-
-    conn = sqlite3.connect(
-        db_path
-    )
-
-    try:
-
-        dashboard_df.to_sql(
-            "dashboard_data_staging",
-            conn,
-            if_exists="replace",
-            index=False
-        )
-
-        conn.commit()
-
-        return {
-            "TotalRows":
-                len(dashboard_df),
-
-            "ProjectCount":
-                dashboard_df[
-                    "Project"
-                ].nunique()
-        }
-
-    finally:
-
-        conn.close()
-
-
-
-
 def process_approved_batch(
     upload_batch_id,
-    db_path="predictive_monitoring.db",
-    use_staging=False
+    db_path="predictive_monitoring.db"
 ):
     """
     Load one approved upload batch, reconstruct its ITT,
@@ -1231,23 +1185,10 @@ def process_approved_batch(
     # 8. WRITE THE COMPLETE COMBINED DATASET
     # --------------------------------------------------
 
-    if use_staging:
-
-        upsert_result = (
-            upsert_dashboard_data_staging(
-                combined_dashboard_df,
-                db_path=db_path
-            )
-        )
-
-    else:
-
-        upsert_result = (
-            upsert_dashboard_data(
-                combined_dashboard_df,
-                db_path=db_path
-            )
-        )
+    upsert_result = upsert_dashboard_data(
+        combined_dashboard_df,
+        db_path=db_path
+    )
 
     rows_after = len(
         combined_dashboard_df

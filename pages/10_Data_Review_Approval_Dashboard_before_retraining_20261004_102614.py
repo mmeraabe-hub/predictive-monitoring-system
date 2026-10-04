@@ -7,7 +7,6 @@ import streamlit as st
 
 from utils.database_utils import DB_FILE
 from utils.approved_itt_etl_clean import process_approved_batch
-from utils.retraining_engine import run_retraining_pipeline
 
 
 # =
@@ -3662,231 +3661,37 @@ else:
             ),
             issue_rows=issue_rows
         )
+
             etl_result = process_approved_batch(
                 upload_batch_id=selected_batch_id,
-                db_path=DB_FILE,
-                use_staging=True
+                db_path=DB_FILE
             )
-
-            retraining_result = run_retraining_pipeline(
-                database_file=DB_FILE
-            )
-
-            performance_results = (
-                retraining_result["Performance"]
-            )
-
-            conn = sqlite3.connect(DB_FILE)
-
-            try:
-
-                performance_results.to_sql(
-                    "model_performance_staging",
-                    conn,
-                    if_exists="replace",
-                    index=False
-                )
-
-                conn.commit()
-
-            finally:
-
-                conn.close()
 
             st.cache_data.clear()
 
             st.success(
-                "Dataset approved, ETL completed, and models retrained."
+            "Dataset approved and ETL completed."
             )
 
-            st.subheader(
-                "ETL Summary"
-            )
-
-            st.write(
-                f"Dashboard rows before ETL: "
-                f"{etl_result['DashboardRowsBefore']:,}"
-            )
 
             st.write(
                 f"Dashboard rows after ETL: "
                 f"{etl_result['DashboardRowsAfter']:,}"
             )
 
-            st.write(
-                f"Projects before ETL: "
-                f"{etl_result['ProjectsBefore']:,}"
-            )
+ 
+
+
 
             st.write(
                 f"Projects after ETL: "
                 f"{etl_result['ProjectsAfter']:,}"
             )
 
-            st.write(
-                f"Rows added: "
-                f"{etl_result['NetRowsAdded']:,}"
-            )
+ 
+            st.rerun()
 
-            st.subheader(
-                "Retraining Summary"
-            )
 
-            track_audit = (
-                retraining_result[
-                    "TrackAudit"
-                ]
-            )
-            recommendation = (
-                retraining_result[
-                    "Recommendations"
-                ]
-                .sort_values(
-                    "RMSE"
-                )
-                .iloc[0]
-            )
-
-            training_run_record = pd.DataFrame(
-                [
-                    {
-                        "UploadBatchID":
-                            selected_batch_id,
-
-                        "RunStartedUTC":
-                            None,
-
-                        "RunFinishedUTC":
-                            str(
-                                retraining_result[
-                                    "RunFinishedUTC"
-                                ]
-                            ),
-
-                        "ProjectsBefore":
-                            int(
-                                etl_result[
-                                    "ProjectsBefore"
-                                ]
-                            ),
-
-                        "ProjectsAfter":
-                            int(
-                                etl_result[
-                                    "ProjectsAfter"
-                                ]
-                            ),
-
-                        "DashboardRowsBefore":
-                            int(
-                                etl_result[
-                                    "DashboardRowsBefore"
-                                ]
-                            ),
-
-                        "DashboardRowsAfter":
-                            int(
-                                etl_result[
-                                    "DashboardRowsAfter"
-                                ]
-                            ),
-
-                        "RowsAdded":
-                            int(
-                                etl_result[
-                                    "NetRowsAdded"
-                                ]
-                            ),
-
-                        "TrainingRows":
-                            int(
-                                track_audit[
-                                    "TrainingRows"
-                                ].max()
-                            ),
-
-                        "TestingRows":
-                            int(
-                                track_audit[
-                                    "TestingRows"
-                                ].max()
-                            ),
-
-                        "ModelsEvaluated":
-                            int(
-                                len(
-                                    performance_results
-                                )
-                            ),
-
-                        "RecommendedModel":
-                            str(
-                                recommendation[
-                                    "Model"
-                                ]
-                            ),
-
-                        "RecommendedRMSE":
-                            float(
-                                recommendation[
-                                    "RMSE"
-                                ]
-                            ),
-
-                        "RecommendedMAE":
-                            float(
-                                recommendation[
-                                    "MAE"
-                                ]
-                            ),
-
-                        "Status":
-                            "Candidate"
-                    }
-                ]
-            )
-
-            conn = sqlite3.connect(
-                DB_FILE
-            )
-
-            try:
-
-                training_run_record.to_sql(
-                    "training_run_staging",
-                    conn,
-                    if_exists="replace",
-                    index=False
-                )
-
-                conn.commit()
-
-            finally:
-
-                conn.close()
-
-            st.dataframe(
-                track_audit,
-                use_container_width=True
-            )
-            st.subheader(
-                "Retraining Summary"
-            )
-            st.write(
-                "Models evaluated:",
-                performance_results[
-                    "Model"
-                ].nunique()
-            )
-
-            st.write(
-                "Retraining finished:",
-                retraining_result[
-                    "RunFinishedUTC"
-                ]
-            )
-
-            
 
         except Exception as error:
  

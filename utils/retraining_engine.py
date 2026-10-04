@@ -333,6 +333,7 @@ def validate_source_data(
         )
 
     business_keys = [
+        "Project",
         "IndicatorID",
         "Year",
         "Quarter"
@@ -502,6 +503,7 @@ def prepare_track_data(
     required_columns = list(
         dict.fromkeys(
             [
+                "Project",
                 "IndicatorID",
                 "PeriodIndex"
             ]
@@ -546,6 +548,7 @@ def prepare_track_data(
         modeling_data
         .sort_values(
             [
+                "Project",
                 "IndicatorID",
                 "PeriodIndex"
             ]
@@ -554,13 +557,15 @@ def prepare_track_data(
             drop=True
         )
     )
-
     modeling_data[
         "SequenceNumber"
     ] = (
         modeling_data
         .groupby(
-            "IndicatorID"
+            [
+                "Project",
+                "IndicatorID"
+            ]
         )
         .cumcount()
     )
@@ -570,7 +575,10 @@ def prepare_track_data(
     ] = (
         modeling_data
         .groupby(
-            "IndicatorID"
+            [
+                "Project",
+                "IndicatorID"
+            ]
         )[
             "IndicatorID"
         ]

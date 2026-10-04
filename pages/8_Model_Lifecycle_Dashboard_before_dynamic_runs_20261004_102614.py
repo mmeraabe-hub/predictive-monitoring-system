@@ -1314,158 +1314,7 @@ def build_approved_dataset_summary():
         "DuplicateKeys":
             duplicate_keys,
     }
-# ============================================================
-# CANDIDATE EVALUATION SUMMARY
-# ============================================================
 
-st.divider()
-
-st.subheader(
-    "Candidate Evaluation Summary"
-)
-
-st.caption(
-    "This candidate dataset and its model results remain "
-    "in staging until a reviewer authorizes promotion to "
-    "production."
-)
-
-conn = sqlite3.connect(
-    DB_FILE
-)
-
-try:
-
-    candidate_run = pd.read_sql_query(
-        """
-        SELECT *
-        FROM training_run_staging
-        ORDER BY RunFinishedUTC DESC
-        LIMIT 1
-        """,
-        conn
-    )
-
-finally:
-
-    conn.close()
-
-if candidate_run.empty:
-
-    st.warning(
-        "No candidate evaluation run is available."
-    )
-
-    st.info(
-        "Approve a reviewed ITT for evaluation before "
-        "making a lifecycle governance decision."
-    )
-
-    st.stop()
-
-candidate = candidate_run.iloc[0]
-
-candidate_col1, candidate_col2, candidate_col3, candidate_col4 = (
-    st.columns(4)
-)
-
-candidate_col1.metric(
-    "Candidate Status",
-    str(
-        candidate[
-            "Status"
-        ]
-    )
-)
-
-candidate_col2.metric(
-    "Projects Before",
-    f"{int(candidate['ProjectsBefore']):,}"
-)
-
-candidate_col3.metric(
-    "Projects After",
-    f"{int(candidate['ProjectsAfter']):,}"
-)
-
-candidate_col4.metric(
-    "Project Change",
-    f"{int(candidate['ProjectsAfter']) - int(candidate['ProjectsBefore']):+,}"
-)
-
-row_col1, row_col2, row_col3, row_col4 = (
-    st.columns(4)
-)
-
-row_col1.metric(
-    "Production Rows",
-    f"{int(candidate['DashboardRowsBefore']):,}"
-)
-
-row_col2.metric(
-    "Candidate Rows",
-    f"{int(candidate['DashboardRowsAfter']):,}"
-)
-
-row_col3.metric(
-    "Net Rows Added",
-    f"{int(candidate['RowsAdded']):,}"
-)
-
-row_col4.metric(
-    "Models Evaluated",
-    f"{int(candidate['ModelsEvaluated']):,}"
-)
-
-training_col1, training_col2, training_col3, training_col4 = (
-    st.columns(4)
-)
-
-training_col1.metric(
-    "Training Rows",
-    f"{int(candidate['TrainingRows']):,}"
-)
-
-training_col2.metric(
-    "Testing Rows",
-    f"{int(candidate['TestingRows']):,}"
-)
-
-training_col3.metric(
-    "Candidate Model",
-    str(
-        candidate[
-            "RecommendedModel"
-        ]
-    )
-)
-
-training_col4.metric(
-    "Candidate RMSE",
-    round(
-        float(
-            candidate[
-                "RecommendedRMSE"
-            ]
-        ),
-        4
-    )
-)
-
-st.markdown(
-    f"""
-**Candidate upload batch:** `{candidate['UploadBatchID']}`
-
-**Candidate MAE:** `{float(candidate['RecommendedMAE']):.4f}`
-
-**Evaluation completed UTC:** `{candidate['RunFinishedUTC']}`
-
-**Production updated:** `No`
-
-The candidate dataset and performance results are currently
-stored in staging and require a human promotion decision.
-"""
-)
 
 # ============================================================
 # SECTION 1: APPROVED DATASET SUMMARY
@@ -1662,14 +1511,14 @@ with st.expander(
 st.divider()
 
 st.subheader(
-    "2.Candidate Model Training Summary"
+    "2. Model Training Summary"
 )
 
 st.caption(
-"The candidate dataset is evaluated in staging before "
-"any production data or model is changed. Performance "
-"is measured using actual test records, and the candidate "
-"recommendation is selected using RMSE and MAE."
+"The latest approved portfolio dataset is automatically "
+"used to retrain all available forecasting models. "
+"Performance is evaluated using actual test records and "
+"the recommended model is selected based on RMSE and MAE."
 )
 
 conn = sqlite3.connect(
@@ -1681,7 +1530,7 @@ try:
     model_performance = pd.read_sql_query(
         """
         SELECT *
-        FROM model_performance_staging
+        FROM model_performance
         """,
         conn
     )
@@ -1806,7 +1655,38 @@ else:
         hide_index=True,
         use_container_width=True
     )
-    
+    st.markdown(
+        "### Best Model by Analysis Track"
+    )
+
+    best_models = (
+        model_performance
+        .sort_values(
+            [
+                "AnalysisTrack",
+                "RMSE_Rank"
+            ]
+        )
+        .groupby(
+            "AnalysisTrack",
+            as_index=False
+        )
+        .first()
+    )
+
+    st.dataframe(
+        best_models[
+            [
+                "AnalysisTrack",
+                "Model",
+                "RMSE",
+                "MAE",
+                "GovernanceRank"
+            ]
+        ],
+        hide_index=True,
+        use_container_width=True
+    )
     st.markdown(
     """
 ### Model Selection Process
