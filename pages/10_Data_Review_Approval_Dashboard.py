@@ -3475,6 +3475,39 @@ current_status = str(
     ]
 )
 
+if current_status == "Approved":
+
+    st.success(
+        "This uploaded ITT has already been approved."
+    )
+
+    st.write(
+        "Approved by:",
+        selected_batch[
+            "ApprovedBy"
+        ]
+    )
+
+    st.write(
+        "Approved UTC:",
+        selected_batch[
+            "ApprovedTimestampUTC"
+        ]
+    )
+
+if pd.notna(
+        selected_batch[
+            "ReviewNotes"
+        ]
+    ):
+
+        st.write(
+            "Review notes:",
+            selected_batch[
+                "ReviewNotes"
+            ]
+        )
+
 else:
 
     st.markdown("### Final Reviewer Approval")
