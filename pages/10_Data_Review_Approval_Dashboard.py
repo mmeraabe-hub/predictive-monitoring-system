@@ -3672,6 +3672,17 @@ else:
                 database_file=DB_FILE
             )
 
+            st.write(
+                "Retraining Result Keys"
+            )
+
+            st.write(
+                list(
+                    retraining_result.keys()
+                )
+            )
+
+
             performance_results = (
                 retraining_result["Performance"]
             )

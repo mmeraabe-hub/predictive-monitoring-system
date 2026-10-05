@@ -250,12 +250,28 @@ def load_recommended_original_candidate(
 
     if production_rows:
 
-        raise RuntimeError(
-            "The recommended model is already the current "
-            "Original-track Production model. A newer "
-            "Candidate version must be created by retraining "
-            "before another promotion can be executed."
-        )
+        return {
+            "Model":
+                str(
+                    production_rows[0][0]
+                ).strip(),
+
+            "Version":
+                str(
+                    production_rows[0][1]
+                ).strip(),
+
+            "MAE":
+                production_rows[0][2],
+
+            "RMSE":
+                production_rows[0][3],
+
+            "Status":
+                str(
+                    production_rows[0][4]
+                ).strip(),
+        }
 
     available_candidates = conn.execute(
         """
@@ -652,12 +668,12 @@ def execute_governance_decision(
     ).strip()
 
     if action not in [
-        "Promote Model",
-        "Decline Recommendation",
+        "Promote Candidate",
+        "Reject Candidate",
     ]:
         raise ValueError(
             "Select Promote Model or "
-            "Decline Recommendation."
+            "Reject Candidate."
         )
 
     if not reviewer_name:
@@ -698,7 +714,6 @@ def execute_governance_decision(
     ).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
-
     conn = sqlite3.connect(
         DB_FILE,
         timeout=30
@@ -726,8 +741,6 @@ def execute_governance_decision(
                 conn
             )
         )
-
-
         candidate = (
             load_recommended_original_candidate(
                 conn=conn,
@@ -736,6 +749,19 @@ def execute_governance_decision(
                 ),
             )
         )
+
+        candidate_status = str(
+            candidate.get(
+                "Status",
+                ""
+            )
+        ).strip().lower()
+
+        model_already_production = (
+            candidate_status == "production"
+        )
+       
+        
 
         dashboard_result = {
             "RowsBefore":
@@ -780,7 +806,7 @@ def execute_governance_decision(
                 [],
         }
 
-        if action == "Promote Model":
+        if action == "Promote Candidate":
 
             staging_dashboard = pd.read_sql_query(
                 """
@@ -828,74 +854,95 @@ def execute_governance_decision(
                 SET Status = 'Promoted'
                 """
             )
+            if model_already_production:
 
-            retired_update = conn.execute(
-                """
-                UPDATE model_registry
-                SET Status = 'Retired'
-                WHERE DatasetType = 'Original'
-                  AND Model = ?
-                  AND Version = ?
-                  AND lower(trim(Status)) = 'production'
-                """,
-                (
-                    production_before[
-                        "Model"
-                    ],
-                    production_before[
-                        "Version"
-                    ],
-                ),
-            )
+                production_after = {
+                    "Model":
+                        production_before[
+                            "Model"
+                        ],
 
-            if retired_update.rowcount != 1:
-                raise RuntimeError(
-                    "The current Original production model "
-                    "could not be retired safely."
+                    "Version":
+                        production_before[
+                            "Version"
+                        ],
+                }
+
+            else:
+
+                retired_update = conn.execute(
+                    """
+                    UPDATE model_registry
+                    SET Status = 'Retired'
+                    WHERE lower(trim(DatasetType)) = 'original'
+                      AND Model = ?
+                      AND Version = ?
+                      AND lower(trim(Status)) = 'production'
+                    """,
+                    (
+                        production_before[
+                            "Model"
+                        ],
+                        production_before[
+                            "Version"
+                        ],
+                    ),
                 )
 
-            promoted_update = conn.execute(
-                """
-                UPDATE model_registry
-                SET Status = 'Production'
-                WHERE DatasetType = 'Original'
-                  AND Model = ?
-                  AND Version = ?
-                  AND lower(trim(Status)) = 'candidate'
-                """,
-                (
-                    candidate[
-                        "Model"
-                    ],
-                    candidate[
-                        "Version"
-                    ],
-                ),
-            )
+                if retired_update.rowcount != 1:
+                    raise RuntimeError(
+                        "The current Original production model "
+                        "could not be retired safely."
+                    )
 
-            if promoted_update.rowcount != 1:
-                raise RuntimeError(
-                    "The recommended Candidate could not "
-                    "be promoted safely."
+                promoted_update = conn.execute(
+                    """
+                    UPDATE model_registry
+                    SET Status = 'Production'
+                    WHERE lower(trim(DatasetType)) = 'original'
+                      AND Model = ?
+                      AND Version = ?
+                      AND lower(trim(Status)) = 'candidate'
+                    """,
+                    (
+                        candidate[
+                            "Model"
+                        ],
+                        candidate[
+                            "Version"
+                        ],
+                    ),
                 )
 
-            production_after = {
-                "Model":
-                    candidate[
-                        "Model"
-                    ],
+                if promoted_update.rowcount != 1:
+                    raise RuntimeError(
+                        "The recommended Candidate could not "
+                        "be promoted safely."
+                    )
 
-                "Version":
-                    candidate[
-                        "Version"
-                    ],
-            }
+                production_after = {
+                    "Model":
+                        candidate[
+                            "Model"
+                        ],
 
+                    "Version":
+                        candidate[
+                            "Version"
+                        ],
+                }
+            
             audit_action = (
                 "Promote"
             )
 
         else:
+
+            if model_already_production:
+                raise RuntimeError(
+                    "The recommended model is already in production "
+                    "and cannot be rejected as a Candidate."
+                )
 
             declined_update = conn.execute(
                 """
@@ -969,7 +1016,7 @@ def execute_governance_decision(
                 "verification failed."
             )
 
-            conn.execute(
+        conn.execute(
             """
             INSERT INTO model_lifecycle_decision_log (
                 DecisionTimestampUTC,
@@ -1353,6 +1400,9 @@ def build_approved_dataset_summary():
 # ============================================================
 # CANDIDATE EVALUATION SUMMARY
 # ============================================================
+# ============================================================
+# CANDIDATE EVALUATION SUMMARY
+# ============================================================
 
 st.divider()
 
@@ -1361,9 +1411,10 @@ st.subheader(
 )
 
 st.caption(
-    "This candidate dataset and its model results remain "
-    "in staging until a reviewer authorizes promotion to "
-    "production."
+    "The approved dataset has been processed and evaluated "
+    "in the staging environment. Candidate results remain "
+    "separate from production until a reviewer authorizes "
+    "promotion."
 )
 
 conn = sqlite3.connect(
@@ -1378,6 +1429,14 @@ try:
         FROM training_run_staging
         ORDER BY RunFinishedUTC DESC
         LIMIT 1
+        """,
+        conn
+    )
+
+    candidate_performance = pd.read_sql_query(
+        """
+        SELECT *
+        FROM model_performance_staging
         """,
         conn
     )
@@ -1399,13 +1458,21 @@ if candidate_run.empty:
 
     st.stop()
 
+if candidate_performance.empty:
+
+    st.warning(
+        "No candidate model-performance results are available."
+    )
+
+    st.stop()
+
 candidate = candidate_run.iloc[0]
 
-candidate_col1, candidate_col2, candidate_col3, candidate_col4 = (
-    st.columns(4)
+candidate_status_col1, candidate_status_col2, candidate_status_col3 = (
+    st.columns(3)
 )
 
-candidate_col1.metric(
+candidate_status_col1.metric(
     "Candidate Status",
     str(
         candidate[
@@ -1414,23 +1481,47 @@ candidate_col1.metric(
     )
 )
 
-candidate_col2.metric(
+candidate_status_col2.metric(
+    "Forecasting Models",
+    f"{candidate_performance['Model'].nunique():,}"
+)
+
+candidate_status_col3.metric(
+    "Evaluation Completed UTC",
+    str(
+        candidate[
+            "RunFinishedUTC"
+        ]
+    )
+)
+
+st.markdown(
+    "#### Candidate Dataset Impact"
+)
+
+project_col1, project_col2, project_col3 = (
+    st.columns(3)
+)
+
+project_col1.metric(
     "Projects Before",
     f"{int(candidate['ProjectsBefore']):,}"
 )
 
-candidate_col3.metric(
+project_col2.metric(
     "Projects After",
     f"{int(candidate['ProjectsAfter']):,}"
 )
 
-candidate_col4.metric(
+project_col3.metric(
     "Project Change",
-    f"{int(candidate['ProjectsAfter']) - int(candidate['ProjectsBefore']):+,}"
+    (
+        f"{int(candidate['ProjectsAfter']) - int(candidate['ProjectsBefore']):+d}"
+    )
 )
 
-row_col1, row_col2, row_col3, row_col4 = (
-    st.columns(4)
+row_col1, row_col2, row_col3 = (
+    st.columns(3)
 )
 
 row_col1.metric(
@@ -1448,61 +1539,201 @@ row_col3.metric(
     f"{int(candidate['RowsAdded']):,}"
 )
 
-row_col4.metric(
-    "Models Evaluated",
-    f"{int(candidate['ModelsEvaluated']):,}"
+split_col1, split_col2 = (
+    st.columns(2)
 )
 
-training_col1, training_col2, training_col3, training_col4 = (
-    st.columns(4)
-)
-
-training_col1.metric(
-    "Training Rows",
+split_col1.metric(
+    "Training Rows per Track",
     f"{int(candidate['TrainingRows']):,}"
 )
 
-training_col2.metric(
-    "Testing Rows",
+split_col2.metric(
+    "Testing Rows per Track",
     f"{int(candidate['TestingRows']):,}"
 )
 
-training_col3.metric(
-    "Candidate Model",
-    str(
-        candidate[
-            "RecommendedModel"
-        ]
-    )
+st.caption(
+    "The Original and Capped tracks use the same underlying "
+    "candidate observations with different target treatments. "
+    "Training and testing rows are therefore reported per track "
+    "and should not be added together."
 )
 
-training_col4.metric(
-    "Candidate RMSE",
-    round(
-        float(
-            candidate[
-                "RecommendedRMSE"
-            ]
-        ),
-        4
-    )
+original_recommendation = (
+    candidate_performance[
+        candidate_performance[
+            "AnalysisTrack"
+        ]
+        .astype(str)
+        .str.contains(
+            "Original",
+            case=False,
+            na=False
+        )
+        &
+        candidate_performance[
+            "IsRecommended"
+        ]
+        .fillna(0)
+        .astype(int)
+        .eq(1)
+    ]
+    .copy()
+)
+
+capped_recommendation = (
+    candidate_performance[
+        candidate_performance[
+            "AnalysisTrack"
+        ]
+        .astype(str)
+        .str.contains(
+            "Capped",
+            case=False,
+            na=False
+        )
+        &
+        candidate_performance[
+            "IsRecommended"
+        ]
+        .fillna(0)
+        .astype(int)
+        .eq(1)
+    ]
+    .copy()
 )
 
 st.markdown(
-    f"""
-**Candidate upload batch:** `{candidate['UploadBatchID']}`
-
-**Candidate MAE:** `{float(candidate['RecommendedMAE']):.4f}`
-
-**Evaluation completed UTC:** `{candidate['RunFinishedUTC']}`
-
-**Production updated:** `No`
-
-The candidate dataset and performance results are currently
-stored in staging and require a human promotion decision.
-"""
+    "#### Recommended Models by Analytical Track"
 )
 
+if original_recommendation.empty:
+
+    st.warning(
+        "No recommended Original-track candidate was found."
+    )
+
+else:
+
+    original_candidate = (
+        original_recommendation.iloc[0]
+    )
+
+    original_col, capped_col = st.columns(2)
+
+    with original_col:
+
+        st.markdown(
+            "### Original Track Winner"
+        )
+
+        st.metric(
+            "Recommended Model",
+            str(
+                original_candidate[
+                    "Model"
+                ]
+            )
+        )
+
+        original_metric_col1, original_metric_col2 = (
+            st.columns(2)
+        )
+
+        original_metric_col1.metric(
+            "RMSE",
+            f"{float(original_candidate['RMSE']):.6f}"
+        )
+
+        original_metric_col2.metric(
+            "MAE",
+            f"{float(original_candidate['MAE']):.6f}"
+        )
+
+        st.success(
+            "Production Governance Recommendation. "
+            "This is the candidate considered for production "
+            "promotion."
+        )
+
+    with capped_col:
+
+        st.markdown(
+            "### Capped Track Winner"
+        )
+
+        if capped_recommendation.empty:
+
+            st.warning(
+                "No recommended Capped-track candidate was found."
+            )
+
+        else:
+
+            capped_candidate = (
+                capped_recommendation.iloc[0]
+            )
+
+            st.metric(
+                "Recommended Model",
+                str(
+                    capped_candidate[
+                        "Model"
+                    ]
+                )
+            )
+
+            capped_metric_col1, capped_metric_col2 = (
+                st.columns(2)
+            )
+
+            capped_metric_col1.metric(
+                "RMSE",
+                f"{float(capped_candidate['RMSE']):.6f}"
+            )
+
+            capped_metric_col2.metric(
+                "MAE",
+                f"{float(capped_candidate['MAE']):.6f}"
+            )
+
+            st.info(
+                "Sensitivity Analysis Recommendation. "
+                "This result provides supplementary analytical "
+                "evidence and is not directly promoted."
+            )
+
+st.markdown(
+    "#### Evaluation Metadata"
+)
+
+metadata_col1, metadata_col2 = (
+    st.columns(2)
+)
+
+metadata_col1.text_input(
+    "Candidate Upload Batch",
+    value=str(
+        candidate[
+            "UploadBatchID"
+        ]
+    ),
+    disabled=True
+)
+
+metadata_col2.text_input(
+    "Production Updated",
+    value="No",
+    disabled=True
+)
+
+st.info(
+    "The candidate dataset and model-performance results "
+    "remain in staging. Production data and production model "
+    "status will change only after the authorized governance "
+    "decision is executed."
+)
 # ============================================================
 # SECTION 1: APPROVED DATASET SUMMARY
 # ============================================================
@@ -1510,12 +1741,56 @@ stored in staging and require a human promotion decision.
 st.divider()
 
 st.subheader(
-    "1. Approved Dataset Summary"
+    "1.Research Baseline and Candidate Evaluation"
+)
+st.caption(
+    "This section separates the original research findings "
+    "from the latest candidate evaluation results."
+)
+st.info(
+    """
+### Research Baseline (Static)
+
+The following results represent the original four-project
+research dataset used during system development and thesis
+evaluation.
+
+These findings remain unchanged even when new approved
+datasets are submitted.
+
+Original Track Winner
+• Model: Naive Persistence
+• RMSE: 7.616301
+• MAE: 0.570670
+
+Capped Track Winner
+• Model: Random Forest
+• RMSE: 0.206468
+• MAE: 0.134001
+
+Research Dataset
+• Projects: 4
+• Test Rows: 756
+"""
 )
 
-st.caption(
-    "This section links the Data Review & Approval workflow "
-    "to model retraining and lifecycle governance."
+st.info(
+    """
+Why Two Analytical Tracks?
+
+The Original Track preserves achievement ratios exactly as
+reported in project monitoring data. This track is used
+for model governance decisions and production promotion.
+
+The Capped Track limits extreme achievement-ratio values
+and is used for sensitivity analysis and comparison. It
+helps determine whether unusually large values influence
+model performance.
+
+Both tracks are displayed during lifecycle review so that
+reviewers can compare results. Production promotion
+decisions remain focused on the Original Track.
+"""
 )
 
 try:
@@ -1556,104 +1831,21 @@ summary_col1, summary_col2, summary_col3, summary_col4 = (
     st.columns(4)
 )
 
-summary_col1.metric(
-    "Projects",
-    f"{approved_summary['ProjectCount']:,}",
+# --------------------------------------------------
+# OLD APPROVED DATASET SUMMARY REMOVED
+# This information is replaced by the
+# Research Baseline and Candidate Evaluation sections.
+# --------------------------------------------------
+
+dataset_ready = True
+
+
+
+st.success(
+    "Research Baseline loaded. Candidate evaluation results "
+    "are displayed below and will be used for lifecycle review."
 )
 
-summary_col2.metric(
-    "Indicators",
-    f"{approved_summary['IndicatorCount']:,}",
-)
-
-summary_col3.metric(
-    "Longitudinal Records",
-    f"{approved_summary['LongitudinalRecordCount']:,}",
-)
-
-summary_col4.metric(
-    "Approval Status",
-    approved_summary[
-        "Status"
-    ],
-)
-
-
-detail_col1, detail_col2, detail_col3, detail_col4 = (
-    st.columns(4)
-)
-
-detail_col1.metric(
-    "Uploaded ITT Rows",
-    f"{approved_summary['ITTRecordCount']:,}",
-)
-
-detail_col2.metric(
-    "Dashboard Records",
-    f"{approved_summary['DashboardRecordCount']:,}",
-)
-
-detail_col3.metric(
-    "Duplicate Keys",
-    f"{approved_summary['DuplicateKeys']:,}",
-)
-
-dataset_ready = (
-    approved_summary[
-        "DuplicateKeys"
-    ]
-    == 0
-)
-
-detail_col4.metric(
-    "Dataset Readiness",
-    (
-        "Ready"
-        if dataset_ready
-        else "Review Required"
-    ),
-)
-
-
-st.markdown(
-    f"""
-**Upload batch:** `{approved_summary['UploadBatchID']}`
-
-**Source file:** `{approved_summary['FileName']}`
-
-**Approved by:** {
-    approved_summary['ApprovedBy']
-    if pd.notna(
-        approved_summary['ApprovedBy']
-    )
-    else 'Not recorded'
-}
-
-**Approved UTC:** {
-    approved_summary['ApprovedTimestampUTC']
-    if pd.notna(
-        approved_summary['ApprovedTimestampUTC']
-    )
-    else 'Not recorded'
-}
-"""
-)
-
-
-if dataset_ready:
-
-    st.success(
-        "The approved dataset has been reconstructed, "
-        "transformed, and validated for model retraining."
-    )
-
-else:
-
-    st.error(
-        "The approved dataset contains duplicate "
-        "Project–Indicator–Year–Quarter keys. "
-        "Retraining must not proceed until they are resolved."
-    )
 
 
 project_summary = (
@@ -1764,9 +1956,11 @@ else:
     col1, col2, col3, col4 = st.columns(4)
 
     col1.metric(
-        "Models Evaluated",
-        total_models
-    )
+       "Forecasting Models",
+       model_performance[
+        "Model"
+    ].nunique()
+)
 
     col2.metric(
         "Test Records",
@@ -1779,9 +1973,11 @@ else:
     )
 
     col4.metric(
-        "Recommended Models",
-        recommended_models
-    )
+    "Analytical Tracks",
+    model_performance[
+        "AnalysisTrack"
+    ].nunique()
+)
 
     display_columns = [
         "AnalysisTrack",
@@ -1810,8 +2006,9 @@ else:
         use_container_width=True,
         hide_index=True
     )
-    st.markdown(
-        "### Best Model by Analysis Track"
+    
+    st.subheader(
+        "Best Model by Analysis Track"
     )
 
     best_models = (
@@ -1819,7 +2016,7 @@ else:
         .sort_values(
             [
                 "AnalysisTrack",
-                "RMSE_Rank"
+                "RMSE"
             ]
         )
         .groupby(
@@ -1829,22 +2026,103 @@ else:
         .first()
     )
 
-    st.dataframe(
+    original_result = (
         best_models[
-            [
-                "AnalysisTrack",
-                "Model",
-                "RMSE",
-                "MAE",
-                "GovernanceRank"
+            best_models[
+                "AnalysisTrack"
             ]
-        ],
-        hide_index=True,
-        use_container_width=True
+            .astype(str)
+            .str.contains(
+                "Original",
+                case=False,
+                na=False
+            )
+        ]
     )
-    
+
+    capped_result = (
+        best_models[
+            best_models[
+                "AnalysisTrack"
+            ]
+            .astype(str)
+            .str.contains(
+                "Capped",
+                case=False,
+                na=False
+            )
+        ]
+    )
+
+    track_col1, track_col2 = st.columns(2)
+
+    with track_col1:
+
+        if not original_result.empty:
+
+            record = original_result.iloc[0]
+
+            st.success(
+                "Production Governance Recommendation"
+            )
+
+            st.metric(
+                "Original Track Winner",
+                str(record["Model"])
+            )
+
+            metric_col1, metric_col2 = st.columns(2)
+
+            metric_col1.metric(
+                "RMSE",
+                f"{float(record['RMSE']):.6f}"
+            )
+
+            metric_col2.metric(
+                "MAE",
+                f"{float(record['MAE']):.6f}"
+            )
+
+            st.caption(
+                "The Original Track recommendation is used for "
+                "production promotion decisions."
+            )
+
+    with track_col2:
+
+        if not capped_result.empty:
+
+            record = capped_result.iloc[0]
+
+            st.info(
+                "Sensitivity Analysis Recommendation"
+            )
+
+            st.metric(
+                "Capped Track Winner",
+                str(record["Model"])
+            )
+
+            metric_col1, metric_col2 = st.columns(2)
+
+            metric_col1.metric(
+                "RMSE",
+                f"{float(record['RMSE']):.6f}"
+            )
+
+            metric_col2.metric(
+                "MAE",
+                f"{float(record['MAE']):.6f}"
+            )
+
+            st.caption(
+                "The Capped Track recommendation supports "
+                "comparison and validation but is not directly "
+                "promoted to production."
+            )
+
     st.markdown(
-    """
+        """
 ### Model Selection Process
 
 The approved portfolio dataset is used to retrain:
@@ -1859,7 +2137,7 @@ The recommended model is selected using:
 1. Lowest RMSE
 2. Lowest MAE
 """
-)
+    )
 # ============================================================
 # SECTION 3: RECOMMENDED PRODUCTION MODEL
 # ============================================================
@@ -1867,12 +2145,13 @@ The recommended model is selected using:
 st.divider()
 
 st.subheader(
-    "3. Recommended Production Model"
+    "3.Production Governance Recommendation"
 )
 
 st.caption(
-    "Following retraining, the system recommends the best "
-    "performing model using the approved portfolio dataset."
+    "Following candidate evaluation, the Original Track"
+    "recommendation is presented for governance review and"
+    "potential production promotion."
 )
 
 conn = sqlite3.connect(
@@ -1881,17 +2160,22 @@ conn = sqlite3.connect(
 
 try:
 
-    recommendations = pd.read_sql_query(
-        """
-        SELECT *
-        FROM model_recommendation
-        """,
-        conn
+    recommendations = (
+        model_performance[
+            model_performance[
+                "IsRecommended"
+            ]
+            .fillna(False)
+            .astype(bool)
+        ]
+        .copy()
     )
 
 finally:
 
     conn.close()
+    
+
 
 if recommendations.empty:
 
@@ -1931,7 +2215,7 @@ else:
         col1, col2, col3, col4 = st.columns(4)
 
         col1.metric(
-            "Recommended Model",
+            "Candidate Recommendation",
             str(
                 recommended["Model"]
             )
@@ -1972,13 +2256,16 @@ else:
 
         st.success(
             f"""
-Recommended Production Model:
+Candidate Recommendation for Governance Review
 
 {recommended['Model']}
 
-The recommendation was generated from the
-latest retraining cycle using the approved
-portfolio dataset.
+This recommendation was generated from the
+latest candidate evaluation run in staging.
+
+No production promotion has occurred yet.
+A human reviewer must approve or reject the
+candidate before production is updated.
 """
         )
 
@@ -2165,8 +2452,8 @@ decision_choice = st.radio(
     "Lifecycle Decision",
     [
         "No Action",
-        "Promote Model",
-        "Decline Recommendation"
+        "Promote Candidate",
+        "Reject Candidate"
     ],
     horizontal=True
 )
@@ -2177,7 +2464,7 @@ if decision_choice == "Promote Model":
         f"""
 Governance Decision:
 
-PROMOTE
+PROMOTE CANDIDATE
 
 Recommended Model:
 {recommended['Model']}
@@ -2187,13 +2474,13 @@ Ready for deployment approval.
 """
     )
 
-elif decision_choice == "Decline Recommendation":
+elif decision_choice == "Reject Candidate":
 
     st.warning(
         f"""
 Governance Decision:
 
-DECLINE
+REJECT CANDIDATE
 
 Recommended Model:
 {recommended['Model']}
@@ -2250,11 +2537,11 @@ Expected Actions:
 """
     )
 
-elif decision_choice == "Decline Recommendation":
+elif decision_choice == "Reject Candidate":
 
     st.warning(
         f"""
-### Decline Impact
+### Candidate Rejection Impact
 
 Approved Dataset:
 {approved_summary['UploadBatchID']}

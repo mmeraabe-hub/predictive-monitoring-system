@@ -24,6 +24,45 @@ st.title(
 st.caption(
     "Evaluate forecast accuracy, verification status, and project forecasting performance."
 )
+st.warning(
+    f"""
+Forecast verification results are currently based on
+historical evaluation data from:
+
+{latest_metric_timestamp}
+
+Current lifecycle retraining results may be newer than
+these verification results.
+"""
+)
+# ==================================================
+# CURRENT PRODUCTION MODEL STATUS
+# ==================================================
+
+try:
+
+    conn = sqlite3.connect(DB_FILE)
+
+    current_models = pd.read_sql_query(
+        """
+        SELECT
+            DatasetType,
+            Model,
+            Version,
+            MAE,
+            RMSE,
+            EvaluationDate
+        FROM model_performance
+        WHERE IsRecommended = 1
+        """,
+        conn
+    )
+
+    conn.close()
+
+except Exception:
+
+    current_models = pd.DataFrame()
 
 
 # ==================================================
@@ -68,9 +107,6 @@ def load_data():
     return archive, metrics, projects
 
 
-try:
-
-    archive_df, metrics_df, project_df = load_data()
 
 except Exception as error:
 
@@ -78,10 +114,12 @@ except Exception as error:
         "Forecast verification tables could not be loaded."
     )
 
-    st.exception(error)
+    st.exception(
+        error
+    )
 
     st.stop()
-    # ==================================================
+# ==================================================
 # KPI SECTION
 # ==================================================
 
@@ -129,29 +167,6 @@ if not metrics_df.empty:
             4
         )
     )
-import sqlite3
-import pandas as pd
-
-conn = sqlite3.connect(
-    DB_FILE
-)
-conn = sqlite3.connect(
-    DB_FILE
-)
-
-tables = pd.read_sql_query(
-    """
-    SELECT name
-    FROM sqlite_master
-    WHERE type='table'
-    ORDER BY name
-    """,
-    conn
-)
-
-conn.close()
-
-st.dataframe(tables)
 
 # ==================================================
 # DATA PREPARATION

@@ -1272,7 +1272,6 @@ def generate_recommendations(
 
     return recommendations
 
-
 # ============================================================
 # COMPLETE READ-ONLY PIPELINE
 # ============================================================

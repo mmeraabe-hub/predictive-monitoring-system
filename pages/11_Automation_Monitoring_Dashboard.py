@@ -152,7 +152,6 @@ st.info(
     """
 )
 
-
 # ============================================================
 # DATABASE PATH
 # ============================================================
@@ -366,30 +365,17 @@ def add_missing_optional_columns(
 # ============================================================
 # DATA LOADING
 # ============================================================
+@st.cache_data(ttl=60)
+def load_automation_history(database_path):
 
-@st.cache_data(
-    ttl=60
-)
-def load_automation_history(
-    database_path
-):
-
-    database_path = Path(
-        database_path
-    )
+    database_path = Path(database_path)
 
     if not database_path.exists():
-
         raise FileNotFoundError(
-            "Automation database not found: "
-            f"{database_path}"
+            f"Automation database not found: {database_path}"
         )
 
-    with sqlite3.connect(
-        str(
-            database_path
-        )
-    ) as connection:
+    with sqlite3.connect(str(database_path)) as connection:
 
         integrity = connection.execute(
             "PRAGMA integrity_check"
@@ -400,15 +386,13 @@ def load_automation_history(
             SELECT COUNT(*)
             FROM sqlite_master
             WHERE type = 'table'
-              AND name = 'automation_run_history'
+            AND name = 'automation_run_history'
             """
         ).fetchone()[0]
 
         if not table_exists:
-
             raise RuntimeError(
-                "The automation_run_history table "
-                "does not exist."
+                "The automation_run_history table does not exist."
             )
 
         history_data = pd.read_sql_query(
@@ -420,16 +404,43 @@ def load_automation_history(
             connection
         )
 
-    if str(
-        integrity
-    ).lower() != "ok":
-
+    if str(integrity).lower() != "ok":
         raise RuntimeError(
-            "SQLite integrity validation failed: "
-            f"{integrity}"
+            f"SQLite integrity validation failed: {integrity}"
         )
 
     return history_data
+
+
+@st.cache_data(ttl=60)
+def load_lifecycle_activity():
+
+    with sqlite3.connect(str(DB_FILE)) as connection:
+
+        table_exists = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE type = 'table'
+            AND name = 'model_lifecycle_decision_log'
+            """
+        ).fetchone()[0]
+
+        if not table_exists:
+            return pd.DataFrame()
+
+        lifecycle_data = pd.read_sql_query(
+            """
+            SELECT *
+            FROM model_lifecycle_decision_log
+            ORDER BY rowid DESC
+            """,
+            connection
+        )
+
+    return lifecycle_data
+
+
 
 
 try:
@@ -439,6 +450,10 @@ try:
             DB_FILE
         )
     )
+    lifecycle_activity = (
+        load_lifecycle_activity()
+    )
+
 
 except Exception as error:
 
@@ -451,879 +466,185 @@ except Exception as error:
     )
 
     st.stop()
-
-
 # ============================================================
-# DATA VALIDATION
+# LIFECYCLE AUTOMATION STATUS
 # ============================================================
-
-missing_required_columns = [
-    column
-    for column in REQUIRED_COLUMNS
-    if column not in history.columns
-]
-
-
-if missing_required_columns:
-
-    st.error(
-        "The automation history table is missing "
-        "required columns: "
-        + ", ".join(
-            missing_required_columns
-        )
-    )
-
-    st.stop()
-
-
-history = add_missing_optional_columns(
-    history
-)
-
-
-if history.empty:
-
-    st.warning(
-        "No automation run-history records are available."
-    )
-
-    st.stop()
-
-
-# Normalize selected fields.
-history[
-    "RunID"
-] = pd.to_numeric(
-    history[
-        "RunID"
-    ],
-    errors="coerce"
-)
-
-
-for numeric_column in [
-    "InputRows",
-    "TransformedRows",
-    "RowsInserted",
-    "RowsUpdated",
-    "RowsUnchanged",
-    "DryRun"
-]:
-
-    history[
-        numeric_column
-    ] = pd.to_numeric(
-        history[
-            numeric_column
-        ],
-        errors="coerce"
-    )
-
-
-history[
-    "_RunStartParsed"
-] = pd.to_datetime(
-    history[
-        "RunStartUTC"
-    ],
-    errors="coerce",
-    utc=True
-)
-
-
-history[
-    "_RunEndParsed"
-] = pd.to_datetime(
-    history[
-        "RunEndUTC"
-    ],
-    errors="coerce",
-    utc=True
-)
-
-
-history[
-    "_DurationSeconds"
-] = (
-    history[
-        "_RunEndParsed"
-    ]
-    -
-    history[
-        "_RunStartParsed"
-    ]
-).dt.total_seconds()
-
-
-history = history.sort_values(
-    [
-        "_RunStartParsed",
-        "RunID"
-    ],
-    ascending=[
-        False,
-        False
-    ],
-    na_position="last"
-).reset_index(
-    drop=True
-)
-
-
-# ============================================================
-# SECTION 1: AUTOMATION SUMMARY
-# ============================================================
-
-st.divider()
 
 st.subheader(
-    "1. Automation Summary"
+    "🔄 Lifecycle Automation Status"
 )
 
-st.markdown(
-    """
-    <div class="section-caption">
-        High-level status of recorded operational and governance runs.
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-
-total_runs = int(
-    len(
-        history
-    )
-)
-
-
-completed_mask = (
-    history[
-        "Status"
-    ]
-    .fillna("")
-    .astype(str)
-    .str.strip()
-    .str.lower()
-    .eq(
-        "completed"
-    )
-)
-
-
-successful_runs = int(
-    completed_mask.sum()
-)
-
-
-failed_runs = int(
-    total_runs
-    -
-    successful_runs
-)
-
-
-latest_run = history.iloc[0]
-
-
-latest_run_status = clean_value(
-    latest_run[
-        "Status"
-    ],
-    fallback="Unknown"
-)
-
-
-summary_col1, summary_col2, summary_col3, summary_col4 = (
-    st.columns(4)
-)
-
-
-with summary_col1:
-
-    st.metric(
-        "Total Runs",
-        total_runs,
-        help=(
-            "All records currently stored in "
-            "automation_run_history."
-        )
-    )
-
-
-with summary_col2:
-
-    st.metric(
-        "Successful Runs",
-        successful_runs,
-        help=(
-            "Runs whose Status is Completed."
-        )
-    )
-
-
-with summary_col3:
-
-    st.metric(
-        "Runs Requiring Attention",
-        failed_runs,
-        help=(
-            "Runs whose Status is not Completed."
-        )
-    )
-
-
-with summary_col4:
-
-    st.metric(
-        "Latest Run Status",
-        (
-            status_icon(
-                latest_run_status
-            )
-            + " "
-            + latest_run_status
-        )
-    )
-
-
-# ============================================================
-# SECTION 2: LATEST AUTOMATION STATUS
-# ============================================================
-
-st.divider()
-
-st.subheader(
-    "2. Latest Automation Status"
-)
-
-st.markdown(
-    """
-    <div class="section-caption">
-        The most recent recorded pipeline execution.
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-
-latest_style = status_style_class(
-    latest_run_status
-)
-
-
-latest_run_id = clean_integer(
-    latest_run[
-        "RunID"
-    ]
-)
-
-
-latest_trigger = clean_value(
-    latest_run[
-        "TriggerSource"
-    ]
-)
-
-
-latest_start = format_datetime(
-    latest_run[
-        "RunStartUTC"
-    ]
-)
-
-
-latest_end = format_datetime(
-    latest_run[
-        "RunEndUTC"
-    ]
-)
-
-
-latest_duration = latest_run[
-    "_DurationSeconds"
-]
-
-
-if pd.isna(
-    latest_duration
-):
-
-    latest_duration_text = (
-        "Not available"
-    )
-
-else:
-
-    latest_duration_text = (
-        f"{float(latest_duration):,.3f} seconds"
-    )
-
-
-st.markdown(
-    f"""
-    <div class="{latest_style}">
-        <strong style="font-size: 1.15rem;">
-            {status_icon(latest_run_status)}
-            Latest run: {latest_run_status}
-        </strong>
-        <br><br>
-        <strong>Run ID:</strong>
-        {latest_run_id}
-        <br>
-        <strong>Trigger source:</strong>
-        {latest_trigger}
-        <br>
-        <strong>Started:</strong>
-        {latest_start}
-        <br>
-        <strong>Finished:</strong>
-        {latest_end}
-        <br>
-        <strong>Duration:</strong>
-        {latest_duration_text}
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# ============================================================
-# SECTION 3: GOVERNANCE COMMAND CENTER
-# ============================================================
-
-st.divider()
-
-st.subheader(
-    "3. Governance Command Center"
-)
-
-st.markdown(
-    """
-    <div class="section-caption">
-        Latest retraining and governance outcome with current
-        recommended models for the Original and Capped tracks.
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-
-governance_runs = history[
-    history[
-        "RecommendedOriginalModel"
-    ].notna()
-    |
-    history[
-        "RecommendedCappedModel"
-    ].notna()
-].copy()
-
-
-if governance_runs.empty:
+if lifecycle_activity.empty:
 
     st.info(
-        "No recorded governance recommendation "
-        "is currently available."
+        "No lifecycle activity has been recorded yet."
     )
 
 else:
 
-    latest_governance = governance_runs.iloc[0]
+    latest = lifecycle_activity.iloc[0]
 
-    governance_run_id = clean_integer(
-        latest_governance[
-            "RunID"
-        ]
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+        "Action",
+        str(latest["Action"])
     )
 
-    retraining_status = clean_value(
-        latest_governance[
-            "RetrainingStatus"
-        ]
+    c2.metric(
+        "Projects",
+        f"{latest['ProjectsBefore']} → {latest['ProjectsAfter']}"
     )
 
-    governance_status = clean_value(
-        latest_governance[
-            "GovernanceStatus"
-        ]
+    c3.metric(
+        "Rows",
+        f"{latest['DashboardRowsBefore']} → {latest['DashboardRowsAfter']}"
     )
 
-    automation_type = clean_value(
-        latest_governance[
-            "AutomationType"
-        ]
+    c4.metric(
+        "Status",
+        str(latest["TransactionStatus"])
     )
 
-    governance_col1, governance_col2, governance_col3, governance_col4 = (
-        st.columns(4)
+    st.caption(
+        f"Decision Timestamp: {latest['DecisionTimestampUTC']} | "
+        f"Upload Batch: {latest['UploadBatchID']}"
     )
-
-    with governance_col1:
-
-        st.metric(
-            "Governance Run ID",
-            governance_run_id
-        )
-
-    with governance_col2:
-
-        st.metric(
-            "Retraining Status",
-            (
-                status_icon(
-                    retraining_status
-                )
-                + " "
-                + retraining_status
-            )
-        )
-
-    with governance_col3:
-
-        st.metric(
-            "Governance Status",
-            (
-                status_icon(
-                    governance_status
-                )
-                + " "
-                + governance_status
-            )
-        )
-
-    with governance_col4:
-
-        st.metric(
-            "Automation Type",
-            automation_type
-        )
-
-    original_recommendation = clean_value(
-        latest_governance[
-            "RecommendedOriginalModel"
-        ]
-    )
-
-    capped_recommendation = clean_value(
-        latest_governance[
-            "RecommendedCappedModel"
-        ]
-    )
-
-    original_model_col, capped_model_col = (
-        st.columns(2)
-    )
-
-    with original_model_col:
-
-        st.markdown(
-            f"""
-            <div class="model-card-original">
-                <div class="small-label">
-                    Original Dataset Recommendation
-                </div>
-                <div class="large-value">
-                    {original_recommendation}
-                </div>
-                <br>
-                <span style="color: #64748B;">
-                    Based on the latest completed
-                    retraining and governance record.
-                </span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    with capped_model_col:
-
-        st.markdown(
-            f"""
-            <div class="model-card-capped">
-                <div class="small-label">
-                    Capped Dataset Recommendation
-                </div>
-                <div class="large-value">
-                    {capped_recommendation}
-                </div>
-                <br>
-                <span style="color: #64748B;">
-                    Based on the latest completed
-                    retraining and governance record.
-                </span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
 
 # ============================================================
-# SECTION 4: AUTOMATION RUN HISTORY
+# SECTION 2: AUTOMATION RUN HISTORY
 # ============================================================
-
 st.divider()
 
 st.subheader(
-    "4. Automation Run History"
+    "2. Automation Run History"
 )
 
-st.markdown(
-    """
-    <div class="section-caption">
-        Unified history of approval, UPSERT, retraining,
-        and governance executions.
-    </div>
-    """,
-    unsafe_allow_html=True
+st.caption(
+    "Lifecycle promotion history and governance activity."
 )
 
+if lifecycle_activity.empty:
 
-history_display = history.copy()
-
-
-history_display[
-    "Run Start"
-] = history_display[
-    "RunStartUTC"
-].apply(
-    format_datetime
-)
-
-
-history_display[
-    "Run End"
-] = history_display[
-    "RunEndUTC"
-].apply(
-    format_datetime
-)
-
-
-history_display[
-    "Duration (sec)"
-] = history_display[
-    "_DurationSeconds"
-].round(
-    3
-)
-
-
-history_display[
-    "Run Status"
-] = history_display[
-    "Status"
-].apply(
-    lambda value: (
-        status_icon(
-            value
-        )
-        + " "
-        + clean_value(
-            value,
-            fallback="Unknown"
-        )
-    )
-)
-
-
-history_columns = [
-    "RunID",
-    "TriggerSource",
-    "Run Status",
-    "AutomationType",
-    "RetrainingStatus",
-    "GovernanceStatus",
-    "Run Start",
-    "Duration (sec)"
-]
-
-
-st.dataframe(
-    history_display[
-        history_columns
-    ],
-    hide_index=True,
-    use_container_width=True,
-    column_config={
-        "RunID":
-            st.column_config.NumberColumn(
-                "Run ID",
-                format="%d",
-                width="small"
-            ),
-
-        "TriggerSource":
-            st.column_config.TextColumn(
-                "Trigger Source",
-                width="medium"
-            ),
-
-        "Run Status":
-            st.column_config.TextColumn(
-                "Status",
-                width="small"
-            ),
-
-        "AutomationType":
-            st.column_config.TextColumn(
-                "Automation Type",
-                width="medium"
-            ),
-
-        "RetrainingStatus":
-            st.column_config.TextColumn(
-                "Retraining",
-                width="small"
-            ),
-
-        "GovernanceStatus":
-            st.column_config.TextColumn(
-                "Governance",
-                width="small"
-            ),
-
-        "Run Start":
-            st.column_config.TextColumn(
-                "Run Start",
-                width="medium"
-            ),
-
-        "Duration (sec)":
-            st.column_config.NumberColumn(
-                "Duration (sec)",
-                format="%.3f",
-                width="small"
-            )
-    }
-)
-
-
-# ============================================================
-# SECTION 5: RUN DETAILS
-# ============================================================
-
-st.divider()
-
-st.subheader(
-    "5. Run Details"
-)
-
-st.markdown(
-    """
-    <div class="section-caption">
-        Select a run to inspect its execution, data-change,
-        governance, recommendation, and error details.
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-
-run_options = [
-    int(
-        value
-    )
-    for value in history[
-        "RunID"
-    ].dropna().tolist()
-]
-
-
-selected_run_id = st.selectbox(
-    "Select Run ID",
-    options=run_options,
-    index=0
-)
-
-
-selected_run = history[
-    history[
-        "RunID"
-    ].eq(
-        selected_run_id
-    )
-].iloc[0]
-
-
-general_col, execution_col, governance_detail_col = (
-    st.columns(3)
-)
-
-
-with general_col:
-
-    st.markdown(
-        "### Run Information"
+    st.info(
+        "No lifecycle history found."
     )
 
-    st.markdown(
-        f"""
-        <div class="detail-card">
-            <strong>Run ID:</strong>
-            {selected_run_id}
-            <br><br>
-            <strong>Trigger source:</strong>
-            {clean_value(selected_run['TriggerSource'])}
-            <br><br>
-            <strong>Status:</strong>
-            {status_icon(selected_run['Status'])}
-            {clean_value(selected_run['Status'])}
-            <br><br>
-            <strong>Automation type:</strong>
-            {clean_value(selected_run['AutomationType'])}
-            <br><br>
-            <strong>Dry run:</strong>
-            {'Yes' if clean_integer(selected_run['DryRun']) == 1 else 'No'}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+else:
 
-    st.markdown(
-        f"""
-        <div class="detail-card">
-            <strong>Started:</strong>
-            {format_datetime(selected_run['RunStartUTC'])}
-            <br><br>
-            <strong>Finished:</strong>
-            {format_datetime(selected_run['RunEndUTC'])}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-with execution_col:
-
-    st.markdown(
-        "### Execution Statistics"
-    )
-
-    execution_rows = pd.DataFrame(
-        {
-            "Metric": [
-                "Input rows",
-                "Transformed rows",
-                "Rows inserted",
-                "Rows updated",
-                "Rows unchanged"
-            ],
-
-            "Value": [
-                clean_integer(
-                    selected_run[
-                        "InputRows"
-                    ]
-                ),
-
-                clean_integer(
-                    selected_run[
-                        "TransformedRows"
-                    ]
-                ),
-
-                clean_integer(
-                    selected_run[
-                        "RowsInserted"
-                    ]
-                ),
-
-                clean_integer(
-                    selected_run[
-                        "RowsUpdated"
-                    ]
-                ),
-
-                clean_integer(
-                    selected_run[
-                        "RowsUnchanged"
-                    ]
-                )
-            ]
-        }
-    )
+    display_columns = [
+        "DecisionID",
+        "DecisionTimestampUTC",
+        "Action",
+        "UploadBatchID",
+        "ProjectsBefore",
+        "ProjectsAfter",
+        "DashboardRowsBefore",
+        "DashboardRowsAfter",
+        "TransactionStatus"
+    ]
 
     st.dataframe(
-        execution_rows,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Metric":
-                st.column_config.TextColumn(
-                    "Metric",
-                    width="medium"
-                ),
-
-            "Value":
-                st.column_config.NumberColumn(
-                    "Rows",
-                    format="%d",
-                    width="small"
-                )
-        }
-    )
-
-    st.markdown(
-        f"""
-        <div class="detail-card">
-            <strong>Source file:</strong>
-            {clean_value(selected_run['FileName'])}
-            <br><br>
-            <strong>Upload batch:</strong>
-            {clean_value(selected_run['UploadBatchID'])}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-with governance_detail_col:
-
-    st.markdown(
-        "### Governance Details"
-    )
-
-    st.markdown(
-        f"""
-        <div class="detail-card">
-            <strong>Retraining status:</strong>
-            {clean_value(selected_run['RetrainingStatus'])}
-            <br><br>
-            <strong>Governance status:</strong>
-            {clean_value(selected_run['GovernanceStatus'])}
-            <br><br>
-            <strong>Original recommendation:</strong>
-            {clean_value(selected_run['RecommendedOriginalModel'])}
-            <br><br>
-            <strong>Capped recommendation:</strong>
-            {clean_value(selected_run['RecommendedCappedModel'])}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    error_message = clean_value(
-        selected_run[
-            "ErrorMessage"
+        lifecycle_activity[
+            display_columns
         ],
-        fallback="No error recorded"
+        hide_index=True,
+        width="stretch"
+    )
+# ============================================================
+# SECTION 3: RUN DETAILS
+# ============================================================
+
+st.divider()
+
+st.subheader(
+    "3. Run Details"
+)
+
+st.caption(
+    "Select a lifecycle decision to inspect."
+)
+
+if lifecycle_activity.empty:
+
+    st.info(
+        "No lifecycle activity found."
     )
 
-    if error_message == "No error recorded":
+else:
 
-        st.success(
-            "No error was recorded for this run."
+    selected_id = st.selectbox(
+        "Select Decision ID",
+        lifecycle_activity["DecisionID"].tolist()
+    )
+
+    selected_record = lifecycle_activity[
+        lifecycle_activity["DecisionID"] == selected_id
+    ].iloc[0]
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        st.markdown(
+            "### Lifecycle Information"
         )
 
-    else:
+        st.info(
+            f"""
+Decision ID: {selected_record['DecisionID']}
 
-        st.error(
-            error_message
+Action: {selected_record['Action']}
+
+Timestamp: {selected_record['DecisionTimestampUTC']}
+
+Upload Batch: {selected_record['UploadBatchID']}
+"""
+        )
+
+    with col2:
+
+        st.markdown(
+            "### Production Change"
+        )
+
+        st.info(
+            f"""
+Production Before:
+{selected_record['ProductionModelBefore']} {selected_record['ProductionVersionBefore']}
+
+Production After:
+{selected_record['ProductionModelAfter']} {selected_record['ProductionVersionAfter']}
+
+Status:
+{selected_record['TransactionStatus']}
+"""
+        )
+
+    with col3:
+
+        st.markdown(
+            "### Impact"
+        )
+
+        st.info(
+            f"""
+Projects:
+{selected_record['ProjectsBefore']} → {selected_record['ProjectsAfter']}
+
+Rows:
+{selected_record['DashboardRowsBefore']} → {selected_record['DashboardRowsAfter']}
+
+Recommended Model:
+{selected_record['RecommendedModel']}
+"""
         )
 try:
-    with sqlite3.connect(str(DB_FILE)) as conn:
+
+    with sqlite3.connect(
+        str(DB_FILE)
+    ) as conn:
+
         registry_data = pd.read_sql_query(
             """
             SELECT *
@@ -1331,22 +652,24 @@ try:
             """,
             conn
         )
-except Exception:
-    registry_data = pd.DataFrame() 
 
+except Exception:
+
+    registry_data = pd.DataFrame()
+     
 # ============================================================
-# CHAMPION MODELS AND ROLLBACK READINESS
+# CHAMPION MODELS 
 # ============================================================
 
 
 st.divider()
 
 st.subheader(
-    "🏆 Champion Models and Rollback Readiness"
+    "🏆 Champion Models"
 )
 
 st.caption(
-    "Current production champions and available rollback candidates."
+    "Current production champions for Original and Capped datasets."
 )
 
 champion_col1, champion_col2 = st.columns(2)
@@ -1420,88 +743,7 @@ RMSE: {champion['RMSE']:.4f}
 """
         )
 
-st.divider()
 
-rollback_col1, rollback_col2 = st.columns(2)
-
-with rollback_col1:
-
-    st.markdown(
-        "### Original Rollback Readiness"
-    )
-
-    original_retired = registry_data[
-        (registry_data["DatasetType"] == "Original")
-        &
-        (registry_data["Status"] == "Retired")
-    ]
-
-    if original_retired.empty:
-
-        st.warning(
-            "No rollback candidate available."
-        )
-
-    else:
-
-        candidate = original_retired.iloc[0]
-
-        st.info(
-            f"""
-Rollback Candidate Found
-
-Model:
-{candidate['Model']}
-
-Version:
-{candidate['Version']}
-"""
-        )
-
-with rollback_col2:
-
-    st.markdown(
-        "### Capped Rollback Readiness"
-    )
-
-    capped_retired = registry_data[
-        (registry_data["DatasetType"] == "Capped")
-        &
-        (registry_data["Status"] == "Retired")
-    ]
-
-    if capped_retired.empty:
-
-        st.warning(
-            "No rollback candidate available."
-        )
-
-    else:
-
-        candidate = capped_retired.iloc[0]
-
-        st.info(
-            f"""
-Rollback Candidate Found
-
-Model:
-{candidate['Model']}
-
-Version:
-{candidate['Version']}
-"""
-        )
-
-st.info(
-    """
-Champion = Current Production model.
-
-Rollback Candidate = A previously retired model that could
-potentially be restored after governance review.
-
-This section is read-only and performs no database updates.
-"""
-)
 
 # ============================================================
 # FOOTER
