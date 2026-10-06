@@ -12,7 +12,7 @@ from utils.database_utils import DB_FILE
 # ==================================================
 
 st.set_page_config(
-    page_title="Forecast Verification Dashboard",
+    page_title="Historical Forecast Verification Dashboard",
     page_icon="📈",
     layout="wide"
 )
@@ -22,17 +22,42 @@ st.title(
 )
 
 st.caption(
-    "Evaluate forecast accuracy, verification status, and project forecasting performance."
+    "Historical forecast-verification results preserved from the baseline thesis evaluation."
 )
-st.warning(
-    f"""
-Forecast verification results are currently based on
-historical evaluation data from:
+st.info(
+    """
+### Historical Forecast Verification Dashboard
 
-{latest_metric_timestamp}
+This dashboard preserves the historical forecast-verification
+analysis that supported the original thesis baseline findings.
 
-Current lifecycle retraining results may be newer than
-these verification results.
+The results shown here are based on a historical forecast
+evaluation performed on archived project data and are used
+as a reference benchmark for model verification and forecast
+diagnostics.
+
+This dashboard is intentionally maintained as a static
+historical analysis environment.
+
+Current lifecycle retraining, model evaluation, governance,
+and production-promotion activities are performed through:
+
+• Model Performance Dashboard
+
+• Model Lifecycle Dashboard
+
+• Automation Monitoring Dashboard
+
+A future Forecast Verification Dashboard V2 will consume
+live retraining outputs and updated forecast-verification
+datasets generated from newly approved project data.
+
+Historical Evaluation Date:
+2026-09-15
+
+Purpose:
+Preserve and present the original thesis forecast-verification
+results for comparison against future forecasting frameworks.
 """
 )
 # ==================================================
@@ -68,6 +93,7 @@ except Exception:
 # ==================================================
 # LOAD DATA
 # ==================================================
+
 
 @st.cache_data
 def load_data():
@@ -105,8 +131,9 @@ def load_data():
         conn.close()
 
     return archive, metrics, projects
+try:
 
-
+    archive_df, metrics_df, project_df = load_data()
 
 except Exception as error:
 
@@ -119,6 +146,25 @@ except Exception as error:
     )
 
     st.stop()
+
+if not metrics_df.empty:
+
+    latest_metric_timestamp = str(
+        metrics_df.iloc[0][
+            "EvaluationTimestampUTC"
+        ]
+    )
+
+    st.warning(
+        f"""
+Forecast verification results are currently based on:
+
+{latest_metric_timestamp}
+
+These verification tables have not yet been refreshed by
+the latest retraining pipeline.
+"""
+    )
 # ==================================================
 # KPI SECTION
 # ==================================================

@@ -9,6 +9,9 @@ from utils.database_utils import DB_FILE
 from utils.approved_itt_etl_clean import process_approved_batch
 from utils.retraining_engine import run_retraining_pipeline
 
+from utils.forecast_verification_builder import (
+    build_forecast_verification_staging
+)
 
 # =
 # PAGE CONFIGURATION
@@ -3672,19 +3675,20 @@ else:
                 database_file=DB_FILE
             )
 
-            st.write(
-                "Retraining Result Keys"
-            )
-
-            st.write(
-                list(
-                    retraining_result.keys()
-                )
-            )
-
-
             performance_results = (
                 retraining_result["Performance"]
+            )
+
+            predictions_df = (
+                retraining_result[
+                    "Predictions"
+                ]
+            )
+
+            forecast_results = (
+                build_forecast_verification_staging(
+                    predictions_df
+                )
             )
 
             conn = sqlite3.connect(DB_FILE)
