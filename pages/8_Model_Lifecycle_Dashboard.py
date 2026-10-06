@@ -878,6 +878,102 @@ def execute_governance_decision(
                     if_exists="replace",
                     index=False
                 )
+            conn.execute(
+                """
+                DROP TABLE IF EXISTS indicator_forecast
+                """
+            )
+
+            conn.execute(
+                """
+                CREATE TABLE indicator_forecast AS
+
+                WITH ranked_forecasts AS (
+
+                    SELECT
+                        ForecastCreatedUTC,
+                        EvaluationTimestampUTC,
+                        UploadBatchID,
+                        DatasetType,
+                        Model,
+                        ProjectID,
+                        IndicatorID,
+                        IndicatorName,
+                        Year,
+                        Quarter,
+                        PeriodIndex,
+                        PeriodLabel,
+                        CurrentActualValue,
+                        PredictedValue,
+
+                        ROW_NUMBER() OVER (
+                            PARTITION BY
+                                ProjectID,
+                                IndicatorID
+                            ORDER BY
+                                PeriodIndex DESC,
+                                ForecastCreatedUTC DESC
+                        ) AS ForecastRank
+
+                    FROM prediction_archive
+
+                    WHERE ForecastStatus = 'Verified'
+                      AND CurrentActualValue IS NOT NULL
+                      AND PredictedValue IS NOT NULL
+                )
+
+                SELECT
+                    ProjectID,
+
+                    IndicatorID,
+
+                    IndicatorName,
+
+                    Year AS CurrentYear,
+
+                    Quarter AS CurrentQuarter,
+
+                    PeriodIndex AS CurrentPeriodIndex,
+
+                    PeriodLabel AS CurrentPeriodLabel,
+
+                    CurrentActualValue AS CurrentValue,
+
+                    PredictedValue AS ForecastNextQuarter,
+
+                    CASE
+                        WHEN Model = 'Naive Persistence'
+                        THEN PredictedValue
+                        ELSE NULL
+                    END AS ForecastNextYear,
+
+                    CASE
+                        WHEN Model = 'Naive Persistence'
+                        THEN PredictedValue
+                        ELSE NULL
+                    END AS ForecastLOP,
+
+                    DatasetType,
+
+                    Model AS ForecastModel,
+
+                    CASE
+                        WHEN Model = 'Naive Persistence'
+                        THEN 'Naive persistence carried forward'
+                        ELSE 'Multi-horizon projection not generated'
+                    END AS ProjectionMethod,
+
+                    ForecastCreatedUTC,
+
+                    EvaluationTimestampUTC,
+
+                    UploadBatchID
+
+                FROM ranked_forecasts
+
+                WHERE ForecastRank = 1
+                """
+            )
 
             conn.execute(
                 """

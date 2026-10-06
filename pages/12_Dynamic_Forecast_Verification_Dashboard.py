@@ -269,15 +269,14 @@ detail_col4.metric(
     f"{int(metrics_row['ZeroErrorForecasts']):,}"
 )
 
-
 # ==================================================
-# 2. FORECAST VERIFICATION STATUS
+# 2. PREDICTION VERIFICATION RECORDS
 # ==================================================
 
 st.divider()
 
 st.subheader(
-    "2. Forecast Verification Status"
+    "2. Prediction Verification Records"
 )
 
 status_counts = (
@@ -333,10 +332,69 @@ status_chart.update_layout(
 st.plotly_chart(
     status_chart,
     width="stretch",
-    key="dynamic_forecast_status"
+    key="forecast_status_pie"
 )
 
+project_count = (
+    archive_df[
+        "ProjectID"
+    ]
+    .nunique()
+)
 
+indicator_count = (
+    archive_df[
+        "IndicatorID"
+    ]
+    .nunique()
+)
+
+summary_col1, summary_col2, summary_col3 = (
+    st.columns(3)
+)
+
+summary_col1.metric(
+    "Projects Evaluated",
+    project_count
+)
+
+summary_col2.metric(
+    "Indicators Evaluated",
+    indicator_count
+)
+
+summary_col3.metric(
+    "Prediction Records",
+    len(
+        archive_df
+    )
+)
+
+st.info(
+    """
+A prediction verification record represents one
+Actual-versus-Predicted comparison.
+
+Example:
+
+Indicator: ARST_003
+
+Period: Y5Q1
+
+Actual Value: 1.0626
+
+Predicted Value: 0.6672
+
+Absolute Error: 0.3954
+
+The current total does not represent the number of
+projects or indicators.
+
+It represents the total number of prediction
+comparisons generated from the holdout test dataset
+during the latest retraining cycle.
+"""
+)
 # ==================================================
 # 3. ACTUAL VS PREDICTED VERIFICATION
 # ==================================================
