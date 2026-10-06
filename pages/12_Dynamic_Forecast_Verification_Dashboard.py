@@ -70,25 +70,6 @@ def load_data():
             conn
         )
 
-
-
-prediction_archive = pd.read_sql_query(
-    """
-    SELECT *
-    FROM prediction_archive
-    """,
-    conn
-)
-
-registry = pd.read_sql_query(
-    """
-    SELECT *
-    FROM model_registry
-    """,
-    conn
-)
- 
-
     finally:
 
         conn.close()
