@@ -847,6 +847,37 @@ def execute_governance_decision(
                 if_exists="replace",
                 index=False
             )
+            forecast_tables = [
+                (
+                    "prediction_archive_staging",
+                    "prediction_archive"
+                ),
+                (
+                    "forecast_verification_metrics_staging",
+                    "forecast_verification_metrics"
+                ),
+                (
+                    "forecast_verification_by_project_staging",
+                    "forecast_verification_by_project"
+                ),
+            ]
+
+            for staging_table, production_table in forecast_tables:
+
+                forecast_staging_data = pd.read_sql_query(
+                    f"""
+                    SELECT *
+                    FROM {staging_table}
+                    """,
+                    conn
+                )
+
+                forecast_staging_data.to_sql(
+                    production_table,
+                    conn,
+                    if_exists="replace",
+                    index=False
+                )
 
             conn.execute(
                 """

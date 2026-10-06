@@ -3687,7 +3687,18 @@ else:
 
             forecast_results = (
                 build_forecast_verification_staging(
-                    predictions_df
+                    predictions_df=predictions_df,
+                    recommendations_df=(
+                        retraining_result[
+                            "Recommendations"
+                        ]
+                    ),
+                    upload_batch_id=selected_batch_id,
+                    evaluation_timestamp_utc=(
+                        retraining_result[
+                            "RunFinishedUTC"
+                        ]
+                    ),
                 )
             )
 
@@ -3697,6 +3708,58 @@ else:
 
                 performance_results.to_sql(
                     "model_performance_staging",
+                    conn,
+                    if_exists="replace",
+                    index=False
+                )
+                forecast_results[
+                    "PredictionArchive"
+                ].to_sql(
+                    "prediction_archive_staging",
+                    conn,
+                    if_exists="replace",
+                    index=False
+                )
+
+                forecast_results[
+                    "VerificationMetrics"
+                ].to_sql(
+                    "forecast_verification_metrics_staging",
+                    conn,
+                    if_exists="replace",
+                    index=False
+                )
+
+                forecast_results[
+                    "ProjectMetrics"
+                ].to_sql(
+                    "forecast_verification_by_project_staging",
+                    conn,
+                    if_exists="replace",
+                    index=False
+                )
+                forecast_results[
+                    "PredictionArchive"
+                ].to_sql(
+                    "prediction_archive_staging",
+                    conn,
+                    if_exists="replace",
+                    index=False
+                )
+
+                forecast_results[
+                    "VerificationMetrics"
+                ].to_sql(
+                    "forecast_verification_metrics_staging",
+                    conn,
+                    if_exists="replace",
+                    index=False
+                )
+
+                forecast_results[
+                    "ProjectMetrics"
+                ].to_sql(
+                    "forecast_verification_by_project_staging",
                     conn,
                     if_exists="replace",
                     index=False

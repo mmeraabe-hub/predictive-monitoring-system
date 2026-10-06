@@ -36,15 +36,28 @@ def load_data():
     conn = sqlite3.connect(DB_FILE)
 
     try:
-
-        performance = pd.read_sql_query(
+        verification_metrics = pd.read_sql_query(
             """
             SELECT *
-            FROM model_performance
-            ORDER BY
-                EvaluationDate DESC,
-                DatasetType,
-                GovernanceRank
+            FROM forecast_verification_metrics
+            ORDER BY EvaluationTimestampUTC DESC
+            """,
+            conn
+        )
+
+        project_metrics = pd.read_sql_query(
+            """
+            SELECT *
+            FROM forecast_verification_by_project
+            ORDER BY ProjectID
+            """,
+            conn
+        )
+
+        prediction_archive = pd.read_sql_query(
+            """
+            SELECT *
+            FROM prediction_archive
             """,
             conn
         )
@@ -57,31 +70,44 @@ def load_data():
             conn
         )
 
-        dashboard = pd.read_sql_query(
-            """
-            SELECT *
-            FROM dashboard_data
-            """,
-            conn
-        )
+
+
+prediction_archive = pd.read_sql_query(
+    """
+    SELECT *
+    FROM prediction_archive
+    """,
+    conn
+)
+
+registry = pd.read_sql_query(
+    """
+    SELECT *
+    FROM model_registry
+    """,
+    conn
+)
+ 
 
     finally:
 
         conn.close()
 
     return (
-        performance,
-        registry,
-        dashboard
+        verification_metrics,
+        project_metrics,
+        prediction_archive,
+        registry
     )
 
 
 try:
 
     (
-        performance_df,
-        registry_df,
-        dashboard_df
+        metrics_df,
+        project_df,
+        archive_df,
+        registry_df
     ) = load_data()
 
 except Exception as error:
