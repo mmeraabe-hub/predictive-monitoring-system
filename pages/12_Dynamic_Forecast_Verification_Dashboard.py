@@ -886,11 +886,10 @@ st.dataframe(
 st.caption(
     f"Forecast records displayed: {len(explorer_df):,}"
 )
-
-
 # ==================================================
 # METHODOLOGY NOTE
 # ==================================================
+
 
 st.divider()
 
