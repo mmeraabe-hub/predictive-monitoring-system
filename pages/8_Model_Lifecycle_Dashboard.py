@@ -1679,6 +1679,53 @@ split_col2.metric(
     "Testing Rows per Track",
     f"{int(candidate['TestingRows']):,}"
 )
+# ==================================================
+# INDICATOR IMPACT
+# ==================================================
+
+# ==================================================
+# INDICATOR IMPACT
+# ==================================================
+
+new_indicators_added = int(
+    candidate.get(
+        "NewIndicatorsAdded",
+        0
+    )
+)
+
+updated_indicators = int(
+    candidate.get(
+        "UpdatedIndicators",
+        0
+    )
+)
+
+indicator_change = (
+    new_indicators_added
+)
+col_ind1, col_ind2, col_ind3 = st.columns(3)
+
+with col_ind1:
+
+    st.metric(
+        "New Indicators Added",
+        f"{new_indicators_added:,}"
+    )
+
+with col_ind2:
+
+    st.metric(
+        "Updated Indicators",
+        f"{updated_indicators:,}"
+    )
+
+with col_ind3:
+
+    st.metric(
+        "Indicator Change",
+        f"{indicator_change:+,}"
+    )
 
 st.caption(
     "The Original and Capped tracks use the same underlying "

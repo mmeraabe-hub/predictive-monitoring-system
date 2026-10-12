@@ -28,7 +28,39 @@ st.caption(
     "Explore current indicator risk, project early-warning forecasts, "
     "and the indicators contributing most to expected project risk."
 )
+st.markdown("### Risk Classification Rules")
 
+rule_col1, rule_col2, rule_col3 = st.columns(3)
+
+rule_col1.markdown(
+    """
+**Quarterly**
+
+🟢 ≥ 90%  
+🟡 70% - 89%  
+🔴 < 70%
+"""
+)
+
+rule_col2.markdown(
+    """
+**Annual**
+
+🟢 ≥ 95%  
+🟡 80% - 94%  
+🔴 < 80%
+"""
+)
+
+rule_col3.markdown(
+    """
+**Life-of-Project**
+
+🟢 ≥ 100%  
+🟡 85% - 99%  
+🔴 < 85%
+"""
+)
 
 # ==================================================
 # HELPER FUNCTIONS
@@ -445,6 +477,8 @@ st.altair_chart(
 )
 
 
+
+
 # --------------------------------------------------
 # INDICATOR RISK LIST
 # --------------------------------------------------
@@ -491,36 +525,28 @@ if ratio_column in display_data.columns:
     display_data = display_data.drop(
         columns=[ratio_column]
     )
+    st.dataframe(
+        display_data,
+        hide_index=True,
+        use_container_width=True,
+    )
 
-
-st.dataframe(
-    display_data,
-    hide_index=True,
-    use_container_width=True,
-)
-
-
-st.caption(
-    "The achievement index is displayed as a percentage. "
-    "The same centralized threshold rules are used throughout "
-    "the Risk, Project, and Indicator dashboards."
-)
-
-
+  
 # ==================================================
-# SECTION 2: PROJECT EARLY WARNING ANALYSIS
+# SECTION 2: PROJECT EARLY WARNING CENTER
 # ==================================================
 
-st.divider()
-
-st.header("2. Project Early Warning Analysis")
+st.header("🚨 Project Early Warning Center")
 
 st.markdown(
-    "This analysis compares the selected project's current "
-    "achievement with its forecasted Annual and "
-    "Life-of-Project achievement."
-)
+    """
+    This executive view highlights whether a project is likely to
+    achieve its year-end and life-of-project targets based on
+    current implementation performance.
 
+    Focus attention on projects requiring management action.
+    """
+)
 
 early_warning_projects = sorted(
     snapshot["Project"]
@@ -530,162 +556,521 @@ early_warning_projects = sorted(
     .tolist()
 )
 
-
 if not early_warning_projects:
     st.warning(
         "No projects are available for early-warning analysis."
     )
     st.stop()
 
-
 selected_ew_project = st.selectbox(
-    "Select Project for Early Warning Analysis",
+    "Select Project",
     early_warning_projects,
     key="early_warning_project",
 )
-
 
 project_data = snapshot[
     snapshot["Project"].astype(str)
     == selected_ew_project
 ].copy()
 
-
-early_warning_columns = [
-    "AnnualProgress",
+required_columns = [
     "AnnualForecastRatio",
-    "LoPProgress",
     "LoPForecastRatio",
 ]
 
-
-missing_early_warning_columns = [
-    column
-    for column in early_warning_columns
-    if column not in project_data.columns
+missing_columns = [
+    c
+    for c in required_columns
+    if c not in project_data.columns
 ]
 
-
-if missing_early_warning_columns:
+if missing_columns:
     st.error(
-        "Early-warning analysis cannot run because these "
-        "columns are missing: "
-        f"{', '.join(missing_early_warning_columns)}"
+        "Missing required columns: "
+        + ", ".join(missing_columns)
     )
     st.stop()
 
+for column_name in [
+    "AnnualForecastRatio",
+    "LoPForecastRatio",
+]:
+    project_data[column_name] = pd.to_numeric(
+        project_data[column_name],
+        errors="coerce",
+    )
 
-# ==================================================
-# CALCULATE PROJECT-LEVEL INDICES
-# ==================================================
+annual_projection = project_data[
+    "AnnualForecastRatio"
+].median(skipna=True)
 
-# Indicators may use different units, such as people,
-# percentages, hectares, or facilities.
-# The dashboard therefore aggregates normalized achievement
-# ratios rather than adding raw indicator values.
-#
-# The median is used to reduce the influence of unusually
-# high or unusually low indicator values.
+lop_projection = project_data[
+    "LoPForecastRatio"
+].median(skipna=True)
+
+annual_status = safe_classify_risk(
+    annual_projection,
+    "Annual",
+)
+
+lop_status = safe_classify_risk(
+    lop_projection,
+    "LoP",
+)
+
+# --------------------------------------------------
+# OVERALL PROJECT STATUS
+# --------------------------------------------------
+
+status_priority = {
+    "Off Track": 3,
+    "At Risk": 2,
+    "On Track": 1,
+    "Unknown": 0,
+}
+
+overall_status = (
+    annual_status
+    if status_priority.get(
+        annual_status,
+        0
+    )
+    >= status_priority.get(
+        lop_status,
+        0
+    )
+    else lop_status
+)
+
+status_color = {
+    "On Track": "#16A34A",
+    "At Risk": "#F59E0B",
+    "Off Track": "#DC2626",
+    "Unknown": "#64748B",
+}
+
+st.markdown(
+    f"""
+    <div style="
+        background-color:{status_color.get(overall_status,'#64748B')};
+        padding:20px;
+        border-radius:10px;
+        color:white;
+        text-align:center;
+        ">
+        <h2>{overall_status}</h2>
+        <h4>{selected_ew_project}</h4>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.write("")
+
+# --------------------------------------------------
+# EXECUTIVE SCORECARD
+# --------------------------------------------------
+
+status_display_labels = {
+    "On Track": "🟢 On Track",
+    "At Risk": "🟡 At Risk",
+    "Off Track": "🔴 Off Track",
+    "Unknown": "⚪ Data Insufficient",
+}
+
+annual_outlook_display = (
+    "No Projection Available"
+    if pd.isna(annual_projection)
+    else format_percentage(annual_projection)
+)
+
+lop_outlook_display = (
+    "No Projection Available"
+    if pd.isna(lop_projection)
+    else format_percentage(lop_projection)
+)
+
+annual_status_display = status_display_labels.get(
+    annual_status,
+    "⚪ Data Insufficient",
+)
+
+lop_status_display = status_display_labels.get(
+    lop_status,
+    "⚪ Data Insufficient",
+)
+
+score_col1, score_col2, score_col3, score_col4 = st.columns(4)
+
+with score_col1:
+
+    st.markdown(
+        """
+        <div style="font-weight:600;font-size:15px;">
+        Year-End Outlook
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div style="font-size:18px;color:#64748B;">
+        {annual_outlook_display}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with score_col2:
+
+    st.markdown(
+        """
+        <div style="font-weight:600;font-size:15px;">
+        Completion Outlook
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div style="font-size:18px;color:#111827;">
+        {lop_outlook_display}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with score_col3:
+
+    st.markdown(
+        """
+        <div style="font-weight:600;font-size:15px;">
+        Annual Status
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div style="font-size:18px;color:#64748B;">
+        {annual_status_display}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+score_col1, score_col2, score_col3, score_col4 = st.columns(4)
+with score_col4:
+
+    st.markdown(
+        """
+        <div style="font-weight:600;font-size:15px;">
+        LoP Status
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div style="font-size:18px;color:#111827;">
+        {lop_status_display}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+## --------------------------------------------------
+# PROJECT DATA READINESS
+# --------------------------------------------------
+
+st.subheader("Project Data Readiness")
+
+total_project_indicators = len(project_data)
+
+available_annual_projections = int(
+    project_data["AnnualForecastRatio"]
+    .notna()
+    .sum()
+)
+
+missing_annual_projections = int(
+    project_data["AnnualForecastRatio"]
+    .isna()
+    .sum()
+)
+
+if total_project_indicators > 0:
+
+    available_percentage = (
+        available_annual_projections
+        / total_project_indicators
+        * 100
+    )
+
+    missing_percentage = (
+        missing_annual_projections
+        / total_project_indicators
+        * 100
+    )
+
+else:
+
+    available_percentage = 0.0
+    missing_percentage = 0.0
+
+readiness_col1, readiness_col2, readiness_col3 = st.columns(3)
+
+readiness_col1.metric(
+    "Indicators Reviewed",
+    total_project_indicators,
+)
+
+readiness_col2.metric(
+    "Forecast Available",
+    f"{available_percentage:.1f}%",
+)
+
+readiness_col3.metric(
+    "Data Insufficient",
+    f"{missing_percentage:.1f}%",
+)
+
+availability_data = pd.DataFrame(
+    {
+        "Data Status": [
+            "Forecast Available",
+            "Data Insufficient",
+        ],
+        "Percentage": [
+            available_percentage,
+            missing_percentage,
+        ],
+    }
+)
+
+availability_chart = (
+    alt.Chart(
+        availability_data
+    )
+    .mark_bar(
+        cornerRadius=8
+    )
+    .encode(
+        y=alt.Y(
+            "Data Status:N",
+            sort=None,
+            title=None,
+        ),
+        x=alt.X(
+            "Percentage:Q",
+            title="Percent of Indicators",
+            scale=alt.Scale(
+                domain=[0, 100]
+            ),
+        ),
+        color=alt.Color(
+            "Data Status:N",
+            scale=alt.Scale(
+                domain=[
+                    "Forecast Available",
+                    "Data Insufficient",
+                ],
+                range=[
+                    "#16A34A",
+                    "#94A3B8",
+                ],
+            ),
+            legend=None,
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "Data Status:N",
+                title="Status",
+            ),
+            alt.Tooltip(
+                "Percentage:Q",
+                title="Percentage",
+                format=".1f",
+            ),
+        ],
+    )
+    .properties(
+        height=120,
+    )
+)
+
+st.altair_chart(
+    availability_chart,
+    use_container_width=True,
+)
+
+if available_percentage >= 80:
+
+    st.success(
+        f"Data Readiness: {available_percentage:.0f}%  |  High confidence forecast."
+    )
+
+elif available_percentage >= 50:
+
+    st.warning(
+        f"Data Readiness: {available_percentage:.0f}%  |  Moderate confidence forecast."
+    )
+
+else:
+
+    st.error(
+        f"Data Readiness: {available_percentage:.0f}%  |  Low confidence forecast due to missing data."
+    )
+# --------------------------------------------------
+# MANAGEMENT ALERTS
+# --------------------------------------------------
+
+st.subheader(
+    "Management Alert"
+)
+
+if annual_status == "Unknown" and lop_status == "Unknown":
+    st.warning(
+        """
+        Data is insufficient to determine the project's year-end
+        and completion outlooks.
+
+        Management should prioritize completion and validation of
+        missing monitoring data before making a performance decision.
+        """
+    )
+
+elif annual_status == "Unknown":
+    st.info(
+        """
+        The year-end outlook cannot currently be determined because
+        sufficient annual projection data is unavailable.
+
+        The completion outlook is available, but management should
+        interpret the overall project status with caution and address
+        the annual data gaps.
+        """
+    )
+
+elif lop_status == "Unknown":
+    st.info(
+        """
+        The project completion outlook cannot currently be determined
+        because sufficient Life-of-Project projection data is unavailable.
+
+        Management should address the missing data before relying on
+        the overall completion assessment.
+        """
+    )
+
+elif overall_status == "Off Track":
+    st.error(
+        """
+        Immediate management attention is recommended.
+
+        Current projections indicate that the project may not achieve
+        planned targets unless corrective actions are implemented.
+        """
+    )
+
+elif overall_status == "At Risk":
+    st.warning(
+        """
+        Performance should be monitored closely.
+
+        Current projections suggest a moderate risk of underachieving
+        planned targets. Management should review the priority indicators
+        and agree on corrective actions.
+        """
+    )
+
+else:
+    st.success(
+        """
+        Current projections indicate that the project is broadly
+        on track to achieve planned targets.
+        """
+    )
+
+# --------------------------------------------------
+# TOP RISK INDICATORS
+# --------------------------------------------------
+
+st.subheader(
+    "Priority Indicators Requiring Attention"
+)
+
+if (
+    "IndicatorName" in project_data.columns
+    and "AnnualProgress" in project_data.columns
+):
+
+    risk_table = project_data.copy()
+
+    risk_table["RiskStatus"] = risk_table[
+        "AnnualProgress"
+    ].apply(
+        lambda x: safe_classify_risk(
+            x,
+            "Annual",
+        )
+    )
+
+    risk_table = risk_table[
+        risk_table["RiskStatus"].isin(
+            [
+                "At Risk",
+                "Off Track",
+            ]
+        )
+    ]
+
+    columns_to_show = [
+        c
+        for c in [
+            "IndicatorID",
+            "IndicatorName",
+            "AnnualProgress",
+            "RiskStatus",
+        ]
+        if c in risk_table.columns
+    ]
+
+    st.dataframe(
+        risk_table[
+            columns_to_show
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+# Variables used by Section 3 trajectory chart
 
 annual_actual = project_data[
     "AnnualProgress"
 ].median(skipna=True)
 
-annual_forecast = project_data[
-    "AnnualForecastRatio"
-].median(skipna=True)
+annual_forecast = annual_projection
 
 lop_actual = project_data[
     "LoPProgress"
 ].median(skipna=True)
 
-lop_forecast = project_data[
-    "LoPForecastRatio"
-].median(skipna=True)
-
-
-annual_forecast_status = safe_classify_risk(
-    annual_forecast,
-    "Annual",
-)
-
-lop_forecast_status = safe_classify_risk(
-    lop_forecast,
-    "LoP",
-)
-
-
-# --------------------------------------------------
-# EARLY-WARNING SUMMARY
-# --------------------------------------------------
-
-st.subheader(
-    f"Early Warning Summary: {selected_ew_project}"
-)
-
-
-annual_column, lop_column = st.columns(2)
-
-
-with annual_column:
-
-    st.markdown("### Annual Outlook")
-
-    annual_metric_1, annual_metric_2 = st.columns(2)
-
-    annual_metric_1.metric(
-        "Current Annual Index",
-        format_percentage(annual_actual),
-    )
-
-    annual_metric_2.metric(
-        "AI Forecast Annual Index",
-        format_percentage(annual_forecast),
-    )
-
-    st.info(
-        f"{status_icon(annual_forecast_status)} "
-        f"Expected Annual Status: "
-        f"{annual_forecast_status}\n\n"
-        f"{status_message(annual_forecast_status)}"
-    )
-
-
-with lop_column:
-
-    st.markdown("### Life-of-Project Outlook")
-
-    lop_metric_1, lop_metric_2 = st.columns(2)
-
-    lop_metric_1.metric(
-        "Current LoP Index",
-        format_percentage(lop_actual),
-    )
-
-    lop_metric_2.metric(
-        "AI Forecast LoP Index",
-        format_percentage(lop_forecast),
-    )
-
-    st.info(
-        f"{status_icon(lop_forecast_status)} "
-        f"Expected LoP Status: "
-        f"{lop_forecast_status}\n\n"
-        f"{status_message(lop_forecast_status)}"
-    )
-
-
+lop_forecast = lop_projection
 # ==================================================
 # SECTION 3: PROFESSIONAL PROJECT TRAJECTORY CHART
 # ==================================================
 
 st.subheader(
-    "Actual vs AI Forecast vs Target"
+    "Current Progress vs Projected Achievement vs Target"
 )
 
 st.markdown(
     "The solid lines show the movement from current achievement "
-    "to forecasted achievement. The red dashed line is the "
+    "to projected achievement. The red dashed line is the "
     "100% target benchmark."
 )
 
@@ -712,7 +1097,7 @@ if pd.notna(annual_forecast):
     trajectory_records.append(
         {
             "Assessment": "Annual",
-            "Stage": "AI Forecast",
+            "Stage": "Projected Achievement",
             "StageOrder": 2,
             "Achievement": float(
                 annual_forecast * 100
@@ -740,7 +1125,7 @@ if pd.notna(lop_forecast):
     trajectory_records.append(
         {
             "Assessment": "LoP",
-            "Stage": "AI Forecast",
+            "Stage": "Projected Achievement",
             "StageOrder": 2,
             "Achievement": float(
                 lop_forecast * 100
@@ -790,7 +1175,7 @@ else:
                 "Stage:N",
                 sort=[
                     "Current Actual",
-                    "AI Forecast",
+                    "Projected Achievement",
                 ],
                 title=None,
                 axis=alt.Axis(
@@ -915,7 +1300,7 @@ else:
     target_label_data = pd.DataFrame(
         {
             "Stage": [
-                "AI Forecast",
+                "Projected Achievement",
             ],
             "Target": [
                 100.0,
@@ -942,7 +1327,7 @@ else:
                 "Stage:N",
                 sort=[
                     "Current Actual",
-                    "AI Forecast",
+                    "Projected Achievement",
                 ],
             ),
             y=alt.Y(
@@ -963,7 +1348,7 @@ else:
         height=430,
         title=(
             f"{selected_ew_project}: "
-            "Current Achievement to AI Forecast"
+            "Current Performance Trajectory"
         ),
     ).configure_view(
         strokeWidth=0,
@@ -986,55 +1371,6 @@ else:
         "represents the 100% target. A forecast below the red line "
         "indicates an expected target gap."
     )
-
-
-# --------------------------------------------------
-# PROJECT FORECAST GAP CARDS
-# --------------------------------------------------
-
-annual_gap_column, lop_gap_column = st.columns(2)
-
-
-with annual_gap_column:
-
-    if pd.isna(annual_forecast):
-
-        st.metric(
-            "Annual Forecast Gap",
-            "Not available",
-        )
-
-    else:
-
-        annual_gap_to_target = (
-            float(annual_forecast) - 1.0
-        ) * 100
-
-        st.metric(
-            "Annual Forecast Gap",
-            f"{annual_gap_to_target:+.1f} percentage points",
-        )
-
-
-with lop_gap_column:
-
-    if pd.isna(lop_forecast):
-
-        st.metric(
-            "LoP Forecast Gap",
-            "Not available",
-        )
-
-    else:
-
-        lop_gap_to_target = (
-            float(lop_forecast) - 1.0
-        ) * 100
-
-        st.metric(
-            "LoP Forecast Gap",
-            f"{lop_gap_to_target:+.1f} percentage points",
-        )
 
 
 # ==================================================

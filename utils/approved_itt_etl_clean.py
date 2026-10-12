@@ -3,6 +3,13 @@ import numpy as np
 import sqlite3
 import json
 import uuid
+from datetime import datetime
+
+from utils.approved_portal_longitudinal_merge import (
+    finalize_approved_sources,
+    merge_approved_sources_into_longitudinal,
+)
+
 def load_approved_batch(
     upload_batch_id,
     database_file="predictive_monitoring.db"
@@ -989,149 +996,106 @@ def upsert_dashboard_data_staging(
     finally:
 
         conn.close()
-
-
-
-
 def process_approved_batch(
     upload_batch_id,
     db_path="predictive_monitoring.db",
-    use_staging=False
+    use_staging=False,
 ):
     """
-    Load one approved upload batch, reconstruct its ITT,
-    transform it into longitudinal form, build dashboard
-    features, combine it with existing analytical data,
-    remove duplicate records, and replace dashboard_data
-    with the complete combined dataset.
+    Build one combined analytical dataset from the approved Excel
+    upload, existing production rows, approved portal updates, and
+    approved new indicators. Run feature engineering once on the
+    complete raw longitudinal dataset.
     """
-
     import sqlite3
     import pandas as pd
 
-    # --------------------------------------------------
-    # 1. LOAD APPROVED STAGING RECORDS
-    # --------------------------------------------------
-
     loaded_batch = load_approved_batch(
         upload_batch_id=upload_batch_id,
-        database_file=db_path
+        database_file=db_path,
     )
 
-    if not isinstance(loaded_batch, tuple):
-        raise TypeError(
-            "load_approved_batch() must return a tuple."
-        )
-
-    if len(loaded_batch) != 2:
+    if not isinstance(loaded_batch, tuple) or len(loaded_batch) != 2:
         raise ValueError(
-            "load_approved_batch() returned an unexpected "
-            f"tuple length: {len(loaded_batch)}"
+            "load_approved_batch() returned an unexpected result."
         )
 
-    batch_metadata = loaded_batch[0]
-    staged_rows = loaded_batch[1]
+    batch_metadata, staged_rows = loaded_batch
 
     if not isinstance(staged_rows, pd.DataFrame):
         raise TypeError(
-            "The second item returned by load_approved_batch() "
-            "must be a pandas DataFrame, but received "
-            f"{type(staged_rows).__name__}."
+            "The approved staging records must be a pandas DataFrame."
         )
 
-    if staged_rows is None:
-        raise ValueError(
-            "No approved staging records were returned "
-            f"for batch {upload_batch_id}."
-        )
-
-    if hasattr(staged_rows, "empty") and staged_rows.empty:
+    if staged_rows.empty:
         raise ValueError(
             "The approved batch contains no staging records."
         )
 
-    # --------------------------------------------------
-    # 2. RECONSTRUCT THE ORIGINAL ITT
-    # --------------------------------------------------
-
-    itt_df = reconstruct_uploaded_itt(
-        staged_rows
-    )
+    itt_df = reconstruct_uploaded_itt(staged_rows)
 
     if itt_df is None or itt_df.empty:
         raise ValueError(
             "ITT reconstruction produced no records."
         )
 
-    # --------------------------------------------------
-    # 3. TRANSFORM TO LONGITUDINAL FORMAT
-    # --------------------------------------------------
+    uploaded_long_df = transform_itt_to_longitudinal(itt_df)
 
-    long_df = transform_itt_to_longitudinal(
-        itt_df
-    )
-
-    if long_df is None or long_df.empty:
+    if uploaded_long_df is None or uploaded_long_df.empty:
         raise ValueError(
             "Longitudinal transformation produced no records."
         )
 
-    # --------------------------------------------------
-    # 4. BUILD DASHBOARD FEATURES FOR THE NEW BATCH
-    # --------------------------------------------------
-
-    new_dashboard_df = build_dashboard_features(
-        long_df,
-        itt_df=itt_df
+    combined_raw_df, portal_source_audit = (
+        merge_approved_sources_into_longitudinal(
+            uploaded_long_df=uploaded_long_df,
+            uploaded_itt_df=itt_df,
+            database_file=db_path,
+        )
     )
 
-    if (
-        new_dashboard_df is None
-        or new_dashboard_df.empty
-    ):
+    if combined_raw_df is None or combined_raw_df.empty:
+        raise ValueError(
+            "The combined longitudinal source contains no records."
+        )
+
+    combined_dashboard_df = build_dashboard_features(
+        combined_raw_df,
+        itt_df=itt_df,
+    )
+
+    if combined_dashboard_df is None or combined_dashboard_df.empty:
         raise ValueError(
             "Dashboard feature construction produced no records."
         )
 
-    # --------------------------------------------------
-    # 5. LOAD EXISTING DASHBOARD DATA
-    # --------------------------------------------------
-
-    conn = sqlite3.connect(
-        db_path
-    )
+    connection = sqlite3.connect(db_path)
 
     try:
-        table_exists = conn.execute(
+        production_exists = connection.execute(
             """
-            SELECT COUNT(*)
+            SELECT COUNT(1)
             FROM sqlite_master
             WHERE type = 'table'
               AND name = 'dashboard_data'
             """
         ).fetchone()[0]
 
-        if table_exists:
+        if production_exists:
             existing_dashboard_df = pd.read_sql_query(
-                """
-                SELECT *
-                FROM dashboard_data
-                """,
-                conn
+                "SELECT * FROM dashboard_data",
+                connection,
             )
         else:
             existing_dashboard_df = pd.DataFrame()
 
     finally:
-        conn.close()
+        connection.close()
 
-    rows_before = len(
-        existing_dashboard_df
-    )
+    rows_before = len(existing_dashboard_df)
 
     projects_before = (
-        existing_dashboard_df["Project"]
-        .nunique()
+        existing_dashboard_df["Project"].nunique()
         if (
             not existing_dashboard_df.empty
             and "Project" in existing_dashboard_df.columns
@@ -1139,167 +1103,52 @@ def process_approved_batch(
         else 0
     )
 
-    # --------------------------------------------------
-    # 6. VALIDATE COLUMN COMPATIBILITY
-    # --------------------------------------------------
-
-    if not existing_dashboard_df.empty:
-
-        existing_columns = set(
-            existing_dashboard_df.columns
-        )
-
-        new_columns = set(
-            new_dashboard_df.columns
-        )
-
-        missing_from_new = sorted(
-            existing_columns - new_columns
-        )
-
-        extra_in_new = sorted(
-            new_columns - existing_columns
-        )
-
-        if missing_from_new or extra_in_new:
-
-            raise ValueError(
-                "Existing and new dashboard schemas do not match.\n"
-                f"Missing from new data: {missing_from_new}\n"
-                f"Extra in new data: {extra_in_new}"
-            )
-
-        new_dashboard_df = new_dashboard_df[
-            existing_dashboard_df.columns
-        ].copy()
-
-    # --------------------------------------------------
-    # 7. COMBINE EXISTING AND NEW ANALYTICAL DATA
-    # --------------------------------------------------
-
-    if existing_dashboard_df.empty:
-
-        combined_dashboard_df = (
-            new_dashboard_df.copy()
-        )
-
-    else:
-
-        combined_dashboard_df = pd.concat(
-            [
-                existing_dashboard_df,
-                new_dashboard_df
-            ],
-            ignore_index=True
-        )
-
-    # One row per project, indicator, year and quarter.
-    record_key = [
-        "Project",
-        "IndicatorID",
-        "Year",
-        "Quarter"
-    ]
-
-    missing_key_columns = [
-        column
-        for column in record_key
-        if column not in combined_dashboard_df.columns
-    ]
-
-    if missing_key_columns:
-        raise ValueError(
-            "Required dashboard record keys are missing: "
-            + ", ".join(missing_key_columns)
-        )
-
-    combined_dashboard_df = (
-        combined_dashboard_df
-        .sort_values(
-            record_key
-        )
-        .drop_duplicates(
-            subset=record_key,
-            keep="last"
-        )
-        .reset_index(
-            drop=True
-        )
-    )
-
-    # --------------------------------------------------
-    # 8. WRITE THE COMPLETE COMBINED DATASET
-    # --------------------------------------------------
-
     if use_staging:
+        upsert_result = upsert_dashboard_data_staging(
+            combined_dashboard_df,
+            db_path=db_path,
+        )
 
-        upsert_result = (
-            upsert_dashboard_data_staging(
-                combined_dashboard_df,
-                db_path=db_path
-            )
+        finalize_approved_sources(
+            database_file=db_path,
+            audit=portal_source_audit,
+            included_by="Data Review and Approval Dashboard",
         )
 
     else:
-
-        upsert_result = (
-            upsert_dashboard_data(
-                combined_dashboard_df,
-                db_path=db_path
-            )
+        upsert_result = upsert_dashboard_data(
+            combined_dashboard_df,
+            db_path=db_path,
         )
 
-    rows_after = len(
-        combined_dashboard_df
-    )
-
-    projects_after = (
-        combined_dashboard_df[
-            "Project"
-        ].nunique()
-    )
-
-    rows_added = (
-        rows_after
-        - rows_before
-    )
-
-    # --------------------------------------------------
-    # 9. RETURN AUDITABLE ETL RESULTS
-    # --------------------------------------------------
+    rows_after = len(combined_dashboard_df)
+    projects_after = combined_dashboard_df["Project"].nunique()
 
     return {
-        "UploadBatchID":
-            upload_batch_id,
-
-        "SourceRows":
-            len(staged_rows),
-
-        "ReconstructedRows":
-            len(itt_df),
-
-        "LongitudinalRows":
-            len(long_df),
-
-        "NewDashboardRows":
-            len(new_dashboard_df),
-
-        "DashboardRowsBefore":
-            rows_before,
-
-        "DashboardRowsAfter":
-            rows_after,
-
-        "NetRowsAdded":
-            rows_added,
-
-        "ProjectsBefore":
-            projects_before,
-
-        "ProjectsAfter":
-            projects_after,
-
-        "DatabaseWriteResult":
-            upsert_result
+        "UploadBatchID": upload_batch_id,
+        "SourceRows": len(staged_rows),
+        "ReconstructedRows": len(itt_df),
+        "LongitudinalRows": len(uploaded_long_df),
+        "NewDashboardRows": len(combined_dashboard_df),
+        "DashboardRowsBefore": rows_before,
+        "DashboardRowsAfter": rows_after,
+        "NetRowsAdded": rows_after - rows_before,
+        "ProjectsBefore": projects_before,
+        "ProjectsAfter": projects_after,
+        "DatabaseWriteResult": upsert_result,
+        "PortalQuarterlyUpdatesMerged": len(
+            portal_source_audit["portal_ids"]
+        ),
+        "PortalQuarterlyUpdatesUnmatched": len(
+            portal_source_audit["unmatched_portal_ids"]
+        ),
+        "NewIndicatorsMerged": len(
+            portal_source_audit["indicator_submission_ids"]
+        ),
+        "NewIndicatorsWithoutTargets": len(
+            portal_source_audit["indicators_without_targets"]
+        ),
     }
+
+
 

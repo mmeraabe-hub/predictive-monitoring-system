@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
+
 from utils.database_utils import DB_FILE
 from utils.approved_itt_etl_clean import process_approved_batch
 from utils.retraining_engine import run_retraining_pipeline
@@ -3471,7 +3472,227 @@ st.divider()
 st.subheader(
     "Dataset Approval"
 )
+# ==================================================
+# PORTAL APPROVED ITEMS AWAITING DATASET REVIEW
+# ==================================================
 
+st.subheader(
+    "Portal Approved Items Awaiting Dataset Review"
+)
+
+portal_conn = sqlite3.connect(DB_FILE)
+
+try:
+
+    portal_approved_df = pd.read_sql_query(
+        """
+        SELECT
+            PortalApprovalID,
+            SubmissionID,
+            Project,
+            IndicatorID,
+            ProjectYear,
+            Quarter,
+            ApprovedActual,
+            ApprovedBy,
+            ApprovedAt,
+            DatasetInclusionStatus
+        FROM portal_approved_staging
+        WHERE DatasetInclusionStatus =
+            'Pending Dataset Review'
+        ORDER BY
+            PortalApprovalID DESC
+        """,
+        portal_conn,
+    )
+
+finally:
+
+    portal_conn.close()
+
+if portal_approved_df.empty:
+
+    st.info(
+        "There are no portal-approved records waiting "
+        "for dataset review."
+    )
+
+else:
+
+    display_portal_df = (
+        portal_approved_df.copy()
+    )
+
+    display_portal_df["ProjectYear"] = (
+        display_portal_df["ProjectYear"]
+        .apply(
+            lambda year: f"Year {year}"
+        )
+    )
+
+    display_portal_df["Quarter"] = (
+        display_portal_df["Quarter"]
+        .apply(
+            lambda quarter: f"Q{quarter}"
+        )
+    )
+
+    st.dataframe(
+        display_portal_df,
+        hide_index=True,
+        use_container_width=True,
+    )
+st.subheader(
+    "Approved New Indicators Awaiting Dataset Review"
+)
+
+indicator_conn = sqlite3.connect(DB_FILE)
+
+try:
+
+    approved_indicators = pd.read_sql_query(
+        """
+        SELECT
+            IndicatorSubmissionID,
+            Project,
+            ProjectCode,
+            ProposedIndicatorID,
+            IndicatorName,
+            UnitOfMeasure,
+            ReviewedBy,
+            ReviewedAt
+        FROM itt_indicator_submission_staging
+        WHERE ReviewStatus = 'Approved'
+            AND COALESCE(
+            DatasetInclusionStatus,
+            'Pending Dataset Review'
+          ) = 'Pending Dataset Review'
+        ORDER BY IndicatorSubmissionID DESC
+        """,
+        indicator_conn,
+    )
+
+finally:
+
+    indicator_conn.close()
+
+if approved_indicators.empty:
+
+    st.info(
+        "No approved new indicators awaiting dataset review."
+    )
+
+else:
+
+    approved_indicators[
+        "Dataset Review Status"
+    ] = "Pending Dataset Review"
+
+    approved_display = approved_indicators.rename(
+        columns={
+            "IndicatorSubmissionID":
+                "Registration ID",
+            "ProjectCode":
+                "Project Code",
+            "ProposedIndicatorID":
+                "Generated Indicator ID",
+            "IndicatorName":
+                "Indicator Name",
+            "UnitOfMeasure":
+                "Unit",
+            "ReviewedBy":
+                "Approved By",
+            "ReviewedAt":
+                "Approved At",
+        }
+    )
+
+    st.dataframe(
+        approved_display,
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    st.markdown(
+        "### Return Incomplete Indicator For Planning"
+    )
+
+    indicator_return_options = (
+        approved_indicators[
+            "IndicatorSubmissionID"
+        ]
+        .astype(int)
+        .tolist()
+    )
+
+    selected_indicator_return = st.selectbox(
+        "Select Indicator To Return",
+        indicator_return_options,
+        format_func=lambda value:
+            f"Registration {value}",
+        key="indicator_return_selector",
+    )
+
+    indicator_return_comment = st.text_area(
+        "Return Comment",
+        value=(
+            "Missing annual target and/or "
+            "quarter planning data."
+        ),
+        key="indicator_return_comment",
+    )
+
+    return_indicator_button = st.button(
+        "Return For Planning",
+        type="secondary",
+        key="return_indicator_button",
+    )
+
+    if return_indicator_button:
+
+        conn = sqlite3.connect(
+            DB_FILE
+        )
+
+        try:
+
+            conn.execute(
+                """
+                UPDATE
+                    itt_indicator_submission_staging
+                SET
+                    ReviewStatus =
+                        'Returned',
+                    DatasetInclusionStatus =
+                        'Returned For Planning'
+                WHERE
+                    IndicatorSubmissionID = ?
+                """,
+                (
+                    int(
+                        selected_indicator_return
+                    ),
+                ),
+            )
+
+            conn.commit()
+
+            st.success(
+                "Indicator returned for planning correction."
+            )
+
+            st.cache_data.clear()
+
+            st.rerun()
+
+        finally:
+
+            conn.close()
+
+
+# ==================================================
+# APPROVED NEW INDICATORS
+# ==================================================
 
 current_status = str(
     selected_batch[
@@ -3479,49 +3700,15 @@ current_status = str(
     ]
 )
 
+st.divider()
 
-if current_status == "Approved":
+st.warning(
+    "This dataset is currently locked because it has already been approved."
+)
 
-    st.success(
-        "This uploaded ITT has already been approved."
-    )
-
-    st.write(
-        "Approved by:",
-        selected_batch[
-            "ApprovedBy"
-        ]
-    )
-
-    st.write(
-        "Approved UTC:",
-        selected_batch[
-            "ApprovedTimestampUTC"
-        ]
-    )
-
-    if pd.notna(
-        selected_batch[
-            "ReviewNotes"
-        ]
-    ):
-
-        st.write(
-            "Review notes:",
-            selected_batch[
-                "ReviewNotes"
-            ]
-        )
-
-    st.divider()
-
-    st.warning(
-        "This dataset is currently locked because it has already been approved."
-    )
-
-    st.info(
-        "To make corrections, reopen the dataset and return it to Pending Review."
-    )
+st.info(
+    "To make corrections, reopen the dataset and return it to Pending Review."
+)
 reopen_for_review = st.button(
     "Reopen Dataset For Review",
     type="secondary",
@@ -3776,7 +3963,7 @@ else:
             st.success(
                 "Dataset approved, ETL completed, and models retrained."
             )
-
+            
             st.subheader(
                 "ETL Summary"
             )
@@ -3805,6 +3992,44 @@ else:
                 f"Rows added: "
                 f"{etl_result['NetRowsAdded']:,}"
             )
+            st.write(
+                "Portal quarterly updates merged before ETL:",
+                etl_result[
+                    "PortalQuarterlyUpdatesMerged"
+                ],
+            )
+
+            st.write(
+                "Approved new indicators merged before ETL:",
+                etl_result[
+                    "NewIndicatorsMerged"
+                ],
+            )
+
+            if (
+                etl_result[
+                    "PortalQuarterlyUpdatesUnmatched"
+                ]
+                > 0
+            ):
+                st.warning(
+                    f"{etl_result['PortalQuarterlyUpdatesUnmatched']} "
+                    f"portal quarterly update(s) could not "
+                    f"be matched to an indicator in the "
+                    f"combined ITT."
+                )
+
+            if (
+                etl_result[
+                    "NewIndicatorsWithoutTargets"
+                ]
+                > 0
+            ):
+                st.warning(
+                    f"{etl_result['NewIndicatorsWithoutTargets']} "
+                    f"approved new indicator(s) had no saved "
+                    f"quarter planning rows and were not merged."
+                )
 
             st.subheader(
                 "Retraining Summary"
@@ -3874,6 +4099,21 @@ else:
                                 etl_result[
                                     "NetRowsAdded"
                                 ]
+                            ),
+                        "NewIndicatorsAdded":
+                            int(
+                                etl_result.get(
+                                    "NewIndicatorsMerged",
+                                    0
+                                )
+                            ),
+
+                        "UpdatedIndicators":
+                            int(
+                                etl_result.get(
+                                    "PortalQuarterlyUpdatesMerged",
+                                    0
+                                )
                             ),
 
                         "TrainingRows":
