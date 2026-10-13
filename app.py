@@ -1,241 +1,270 @@
-
 import streamlit as st
-st.set_page_config(
-    page_title="Predictive Monitoring System",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-st.markdown(
-    """
-    <style>
-    .main-title {
-        font-size: 2.2rem;
-        ont-weight: 700;
-        color: #1F4E78;
-        margin-bottom: 0.2rem;
-    }
-    .subtitle {
-        font-size: 1.05rem;
-        color: #5F6B76;
-        margin-bottom: 1.5rem;
-    }
-    .info-card {
-        background-color: #F6F9FC;
-        border-left: 5px solid #1F4E78;
-        padding: 1.1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-    }
-    .footer-note {
-        color: #6B7280;
-        font-size: 0.85rem;
-        margin-top: 2rem;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-st.markdown(
-    '<div class="main-title">'
-    'AI-Enabled Predictive Monitoring and Learning System'
-    '</div>',
-    unsafe_allow_html=True
+
+from auth import (
+    clear_session,
+    current_user,
+    login_screen,
+    session_is_valid,
 )
 
-st.markdown(
-    '<div class="subtitle">'
-    'An integrated platform for predictive analytics, governance, '
-    'lifecycle management, automation, and organizational learning'
-    '</div>',
-    unsafe_allow_html=True
+
+# ============================================================
+# LOGIN AND LOGOUT FUNCTIONS
+# ============================================================
+
+def show_login():
+    login_screen()
+
+
+def logout_user():
+    clear_session("LOGOUT")
+    st.rerun()
+
+
+# ============================================================
+# LOGIN PAGE
+# ============================================================
+
+login_page = st.Page(
+    show_login,
+    title="Secure Sign In",
+    icon="🔐",
+    default=True,
 )
 
-st.markdown(
-    """
-    <div class="info-card">
-    <strong>Platform Overview</strong><br>
-    This platform transforms traditional Indicator Tracking Table (ITT)
-    reporting into a governed, predictive, and automated Monitoring,
-    Evaluation, and Learning (MEL) environment.
 
-    The system supports the complete monitoring lifecycle including
-    data acquisition, review and approval, longitudinal transformation,
-    predictive analytics, model governance, lifecycle management,
-    and automation monitoring.
-    </div>
-    """,
-    unsafe_allow_html=True
+# ============================================================
+# READ-ONLY PAGES AVAILABLE TO EVERY AUTHENTICATED USER
+# ============================================================
+
+home_page = st.Page(
+    "pages/0_Home.py",
+    title="Home",
+    icon="🏠",
+    default=True,
 )
 
-st.subheader("Platform Lifecycle")
+portfolio_page = st.Page(
+    "pages/1_Portfolio_Dashboard.py",
+    title="Portfolio Dashboard",
+    icon="📊",
+)
 
-c1, c2, c3, c4 = st.columns(4)
+project_page = st.Page(
+    "pages/2_Project_Dashboard.py",
+    title="Project Dashboard",
+    icon="📁",
+)
 
-with c1:
-    st.info(
-        """
-        **Data Management**
+indicator_page = st.Page(
+    "pages/3_Indicator_Dashboard.py",
+    title="Indicator Dashboard",
+    icon="📈",
+)
 
-        • Upload ITT
+risk_page = st.Page(
+    "pages/6_Risk_Classification_Dashboard.py",
+    title="Risk Classification",
+    icon="⚠️",
+)
 
-        • Quality Review
+model_performance_page = st.Page(
+    "pages/7_Model_Performance_Dashboard.py",
+    title="Model Performance",
+    icon="📉",
+)
 
-        • Approval
+model_lifecycle_page = st.Page(
+    "pages/8_Model_Lifecycle_Dashboard.py",
+    title="Model Lifecycle",
+    icon="🔄",
+)
 
-        • ETL / UPSERT
-        """
+automation_page = st.Page(
+    "pages/11_Automation_Monitoring_Dashboard.py",
+    title="Automation Monitoring",
+    icon="⚙️",
+)
+
+forecast_verification_page = st.Page(
+    "pages/12_Dynamic_Forecast_Verification_Dashboard.py",
+    title="Forecast Verification",
+    icon="🔍",
+)
+
+
+# ============================================================
+# ROLE-SPECIFIC OPERATIONAL PAGES
+# ============================================================
+
+upload_itt_page = st.Page(
+    "pages/5_Upload_ITT.py",
+    title="Upload ITT",
+    icon="📤",
+)
+
+review_approval_page = st.Page(
+    "pages/10_Data_Review_Approval_Dashboard.py",
+    title="Data Review and Approval",
+    icon="✅",
+)
+
+itt_data_entry_page = st.Page(
+    "pages/13_ITT_Data_Entry_Portal.py",
+    title="ITT Data Entry",
+    icon="✍️",
+)
+
+new_indicator_page = st.Page(
+    "pages/14_New_Indicator_Registration.py",
+    title="New Indicator Registration",
+    icon="➕",
+)
+
+user_management_page = st.Page(
+    "pages/15_User_Management.py",
+    title="User Management",
+    icon="🔐",
+)
+
+
+# ============================================================
+# LOGOUT PAGE
+# ============================================================
+
+logout_page = st.Page(
+    logout_user,
+    title="Sign Out",
+    icon="🚪",
+)
+
+
+# ============================================================
+# LOGIN-FIRST NAVIGATION
+# ============================================================
+
+if not session_is_valid():
+
+    selected_page = st.navigation(
+        [
+            login_page,
+        ],
+        position="hidden",
     )
 
-with c2:
-    st.info(
-        """
-        **Analytics**
+    selected_page.run()
+    st.stop()
 
-        • Longitudinal Transformation
 
-        • Feature Engineering
+# ============================================================
+# AUTHENTICATED USER
+# ============================================================
 
-        • Forecasting
+user = current_user()
+roles = set(user.get("roles", []))
 
-        • Risk Classification
-        """
+
+# ============================================================
+# READ-ONLY DASHBOARDS FOR EVERY AUTHENTICATED USER
+# ============================================================
+
+read_only_pages = [
+    home_page,
+    portfolio_page,
+    project_page,
+    indicator_page,
+    risk_page,
+    model_performance_page,
+    automation_page,
+    forecast_verification_page,
+]
+
+
+# ============================================================
+# BUILD ROLE-SPECIFIC WORKSPACE
+# ============================================================
+
+workspace_pages = []
+administration_pages = []
+
+
+# Data Entry users can upload, enter, and register data.
+if "Data Entry" in roles or "Admin" in roles:
+    workspace_pages.extend(
+        [
+            upload_itt_page,
+            itt_data_entry_page,
+            new_indicator_page,
+        ]
     )
 
-with c3:
-    st.info(
-        """
-        **Governance**
 
-        • Model Evaluation
+# Reviewers and Approvers can access the review workflow.
+if (
+    "Reviewer" in roles
+    or "Approver" in roles
+    or "Admin" in roles
+):
+    workspace_pages.append(review_approval_page)
 
-        • Recommendations
 
-        • Drift Monitoring
-
-        • Lifecycle Decisions
-        """
+# Only administrators can manage users.
+if "Admin" in roles:
+    administration_pages.extend(
+        [
+            model_lifecycle_page,
+            user_management_page,
+        ]
     )
 
-with c4:
-    st.info(
-        """
-        **Automation**
 
-        • Retraining Engine
+# ============================================================
+# CREATE NAVIGATION SECTIONS
+# ============================================================
 
-        • Governance Preview
+navigation = {
+    "Read-Only Dashboards": read_only_pages,
+}
 
-        • Audit Logging
+if workspace_pages:
+    navigation["My Workspace"] = workspace_pages
 
-        • Monitoring Dashboard
-        """
+if administration_pages:
+    navigation["Administration"] = administration_pages
+
+navigation["Account"] = [
+    logout_page,
+]
+
+
+# ============================================================
+# USER INFORMATION
+# ============================================================
+
+with st.sidebar:
+    st.markdown("---")
+
+    display_name = user.get(
+        "full_name",
+        user.get("username", "User"),
     )
 
-st.divider()
+    st.caption(f"Signed in as **{display_name}**")
 
-st.subheader("Core Platform Capabilities")
+    role_display = ", ".join(sorted(roles))
 
-st.markdown(
-"""
-✅ Upload and manage Indicator Tracking Tables (ITTs)
+    if role_display:
+        st.caption(f"Role: {role_display}")
 
-✅ Review data quality and approve datasets
 
-✅ Perform ETL and UPSERT processing
+# ============================================================
+# RUN SELECTED AUTHORIZED PAGE
+# ============================================================
 
-✅ Transform monitoring data into longitudinal analytical datasets
-
-✅ Generate predictive forecasts using multiple forecasting models
-
-✅ Support forecast verification and model evaluation
-
-✅ Provide risk classification and early-warning monitoring
-
-✅ Maintain model registries and governance records
-
-✅ Support candidate evaluation and recommendation workflows
-
-✅ Monitor model drift and governance readiness
-
-✅ Manage model lifecycle decisions including promotion and decline
-
-✅ Track champion models and rollback readiness
-
-✅ Execute retraining and governance automation workflows
-
-✅ Monitor automation history and audit trails
-"""
+selected_page = st.navigation(
+    navigation,
+    position="sidebar",
+    expanded=True,
 )
 
-st.divider()
-
-st.subheader("Forecasting Framework")
-
-st.markdown(
-"""
-The platform supports a governed forecasting framework based on
-longitudinal project monitoring data and engineered analytical variables.
-
-Forecasting candidates include:
-
-- Naive Persistence
-- Linear Regression
-- Random Forest
-- XGBoost
-
-Models are evaluated using governance criteria and recommendation rules
-to identify suitable candidates for lifecycle review and monitoring.
-"""
-)
-
-st.divider()
-
-st.subheader("Governance and Lifecycle Management")
-
-st.markdown(
-"""
-The governance framework supports:
-
-- Model Registry Management
-- Candidate Evaluation
-- Governance Recommendations
-- Drift Monitoring
-- Champion Model Tracking
-- Lifecycle Decisions
-- Rollback Readiness Assessment
-"""
-)
-
-st.divider()
-
-st.subheader("Automation Services")
-
-st.markdown(
-"""
-Automation services support:
-
-- Retraining Engine
-- Governance Preview Engine
-- Automation Orchestrator
-- Automation Logger
-- Automation Monitoring Dashboard
-
-These services improve operational transparency,
-auditability, and governance oversight.
-"""
-)
-
-st.warning(
-    "Forecasts, recommendations, governance results, and risk classifications "
-    "are decision-support outputs and should be reviewed by MEL, program, "
-    "and governance stakeholders before operational action."
-)
-
-st.markdown(
-    '<div class="footer-note">'
-    'Developed as part of a Master\'s project on AI-enabled predictive '
-    'monitoring, governance, automation, and organizational learning.'
-    '</div>',
-    unsafe_allow_html=True
-)
+selected_page.run()

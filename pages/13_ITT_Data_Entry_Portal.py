@@ -4,6 +4,9 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+from auth import require_login
+
+current_user = require_login("itt.create")
 
 # ==================================================
 # PAGE CONFIGURATION

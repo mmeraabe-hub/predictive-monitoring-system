@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
+from auth import require_login
+
+current_user = require_login("itt.review")
 
 from utils.database_utils import DB_FILE
 from utils.approved_itt_etl_clean import process_approved_batch

@@ -1324,6 +1324,9 @@ st.set_page_config(
     page_icon="🔄",
     layout="wide",
 )
+from auth import require_login
+
+admin_user = require_login("*")
 
 st.title(
     "Model Lifecycle Management"

@@ -1,5 +1,113 @@
-
-__pycache__/
-*.pyc
+# ============================================================
+# DATABASES AND LOCAL DATA
+# ============================================================
 predictive_monitoring.db
-ITT.xlsx
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# ============================================================
+# PASSWORDS, SECRETS, AND LOCAL CONFIGURATION
+# ============================================================
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+secrets.toml
+*.pem
+*.key
+*.pfx
+*.p12
+
+# ============================================================
+# AUTHENTICATION RESET UTILITIES
+# ============================================================
+reset_*_password.py
+reset_*_password*.py
+init_auth.py
+
+# ============================================================
+# LOCAL AUTHENTICATION BACKUPS
+# ============================================================
+auth_BEFORE_*.py
+auth_before_*.py
+auth_*BACKUP*.py
+auth_*backup*.py
+
+# ============================================================
+# PAGE AND APPLICATION BACKUPS
+# ============================================================
+app_BEFORE_*.py
+app_before_*.py
+pages/*_BEFORE_*.py
+pages/*_before_*.py
+pages/*_current.py
+pages/*_backup*.py
+pages/*_BACKUP*.py
+
+# ============================================================
+# TEMPORARY MIGRATION AND DESIGN SCRIPTS
+# ============================================================
+apply_foresight360_login.py
+clean_system_data.py
+keep_four_projects.py
+check_*.py
+audit_projects.py
+compare_stage_vs_prod.py
+count_indicators.py
+diagnose_*.py
+inspect_*.py
+quick_check_*.py
+reset_*.py
+repair_*.py
+verify_*.py
+
+# ============================================================
+# PYTHON CACHE AND BUILD FILES
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/*.mypy_cache/
+.ruff_cache/
+.coverag*
+htmlcov/
+build/
+dist/
+*.egg-info/*
+# ===============================*============================
+# VIR*UAL ENVIRONMENTS
+# ===============*==================================*=========
+.venv/
+venv/
+env/
+ENV/
+
+* =================================*==========================
+# IDE A*D OPERATING-SYSTEM FILES
+# ============================================================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# USER UPLOADS AND GENERATED OUTPUT
+# ============================================================
+uploads/
+uploaded_files/
+temp/
+tmp/
+logs/
+*.log
+
+# ============================================================
+# OFFICE TEMPORARY FILES
+# ============================================================
+~$*.xlsx
+~$*.xls
+~$*.docx
+~$*.pptx

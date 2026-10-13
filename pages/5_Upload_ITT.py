@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 import streamlit as st
+from auth import require_login
 
+current_user = require_login("itt.create")
 from utils.database_utils import DB_FILE
 
 

@@ -4,7 +4,9 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+from auth import require_login
 
+current_user = require_login("indicator.register")
 st.set_page_config(
     page_title="New Indicator Registration",
     page_icon="➕",
