@@ -508,7 +508,7 @@ def login_screen() -> None:
             font-size:0.9rem;
         ">
             <a href="mailto:meron.abebe@crs.org?subject=FORESIGHT360 Password Reset Request">
-                Forgot Password?
+                Forgot Password? Contact System Administrator
             </a>
         </div>
         """,
