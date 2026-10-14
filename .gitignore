@@ -1,8 +1,7 @@
 # ============================================================
 # DATABASES AND LOCAL DATA
 # ============================================================
-predictive_monitoring.db
-*.db
+
 *.db-journal
 *.sqlite
 *.sqlite3
