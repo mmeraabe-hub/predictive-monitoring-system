@@ -1,5 +1,19 @@
 import streamlit as st
+import sqlite3
 
+try:
+    conn = sqlite3.connect("predictive_monitoring.db")
+
+    users = conn.execute(
+        "SELECT Username FROM auth_users"
+    ).fetchall()
+
+    st.write("CLOUD USERS:", users)
+
+    conn.close()
+
+except Exception as e:
+    st.write("DATABASE ERROR:", e)
 from auth import (
     clear_session,
     current_user,
