@@ -495,7 +495,14 @@ def login_screen() -> None:
                 if user:
                     establish_session(user)
                     st.rerun()
-                st.error("Sign-in failed. Check your credentials or contact the system administrator.")
+
+                st.error(
+                    "Sign-in failed. Check your credentials or contact the system administrator."
+                )
+
+    st.info(
+        "Forgot Password? Please contact the System Administrator to reset your password."
+    )
 
     st.markdown(
         """<div class="fs-footer">FORESIGHT360 · Predictive Monitoring and Learning Platform<br>Secure access for authorized organizational users</div>""",
