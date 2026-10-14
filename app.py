@@ -1,19 +1,9 @@
 import streamlit as st
-import sqlite3
+from auth import initialize_auth_schema, bootstrap_admin_from_environment
 
-try:
-    conn = sqlite3.connect("predictive_monitoring.db")
-
-    users = conn.execute(
-        "SELECT Username FROM auth_users"
-    ).fetchall()
-
-    st.write("CLOUD USERS:", users)
-
-    conn.close()
-
-except Exception as e:
-    st.write("DATABASE ERROR:", e)
+initialize_auth_schema()
+bootstrap_admin_from_environment()
+   
 from auth import (
     clear_session,
     current_user,
