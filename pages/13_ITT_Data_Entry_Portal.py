@@ -3,10 +3,37 @@ from datetime import datetime
 
 import pandas as pd
 import streamlit as st
-
 from auth import require_login
 
-current_user = require_login("itt.create")
+current_user = require_login("itt.view")
+
+user_roles = set(
+    current_user.get(
+        "roles",
+        []
+    )
+)
+
+is_admin = "Admin" in user_roles
+
+is_data_entry = (
+    "Data Entry" in user_roles
+)
+
+is_reviewer = (
+    "Reviewer" in user_roles
+)
+
+can_enter_data = (
+    is_admin
+    or is_data_entry
+)
+
+can_review_submission = (
+    is_admin
+    or is_reviewer
+)
+
 
 # ==================================================
 # PAGE CONFIGURATION
@@ -2685,24 +2712,31 @@ with st.form(
             f"quarterly_confirmation_"
             f"{submission_form_version}"
         ),
+        disabled=not can_enter_data,
     )
+ 
+    
     submit_button = st.form_submit_button(
         "Submit for Review",
         type="primary",
         disabled=(
-            pending_submission is not None
+            not can_enter_data
         ),
     )
 
 
 
 if submit_button:
-    validation_errors = []
 
-    if not submitted_by.strip():
-        validation_errors.append(
-            "Submitted By is required."
+    if not can_enter_data:
+
+        st.error(
+            "Only Data Entry users can submit quarterly data."
         )
+
+        st.stop()
+
+    validation_errors = []
 
     if not confirmed:
         validation_errors.append(
@@ -3366,6 +3400,7 @@ else:
                 f"portal_reviewer_name_"
                 f"{review_form_version}"
             ),
+            disabled=not can_review_submission,
         )
 
         review_comment = st.text_area(
@@ -3374,6 +3409,7 @@ else:
                 f"portal_review_comment_"
                 f"{review_form_version}"
             ),
+            disabled=not can_review_submission,
         )
 
         review_action = st.radio(
@@ -3388,6 +3424,7 @@ else:
                 f"portal_review_action_"
                 f"{review_form_version}"
             ),
+            disabled=not can_review_submission,
         )
 
         confirm_review = st.checkbox(
@@ -3398,23 +3435,32 @@ else:
                 f"portal_review_confirmation_"
                 f"{review_form_version}"
             ),
+            disabled=not can_review_submission,
         )
 
         review_submit_button = (
             st.form_submit_button(
                 "Record Review Decision",
                 type="primary",
+                disabled=(
+                    not can_review_submission
+                )
             )
         )
 
 
-        if review_submit_button:
-            review_errors = []
 
-            if not reviewer_name.strip():
-                review_errors.append(
-                    "Reviewed By is required."
+        if review_submit_button:
+
+            if not can_review_submission:
+
+                st.error(
+                    "Only Reviewers can record review decisions."
                 )
+
+                st.stop()
+
+            review_errors = []
 
             if not confirm_review:
                 review_errors.append(

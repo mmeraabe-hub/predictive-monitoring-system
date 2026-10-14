@@ -3,10 +3,44 @@ from datetime import datetime
 
 import pandas as pd
 import streamlit as st
-
 from auth import require_login
 
-current_user = require_login("indicator.register")
+current_user = require_login("itt.view")
+
+user_roles = set(
+    current_user.get(
+        "roles",
+        []
+    )
+)
+
+is_admin = "Admin" in user_roles
+
+is_data_entry = (
+    "Data Entry" in user_roles
+)
+
+is_reviewer = (
+    "Reviewer" in user_roles
+)
+
+can_enter_data = (
+    is_admin
+    or is_data_entry
+)
+
+can_review_submission = (
+    is_admin
+    or is_reviewer
+)
+
+st.set_page_config(
+    page_title="New Indicator Registration",
+    page_icon="➕",
+    layout="wide",
+)
+
+DATABASE_PATH = "predictive_monitoring.db"
 st.set_page_config(
     page_title="New Indicator Registration",
     page_icon="➕",

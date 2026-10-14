@@ -394,31 +394,31 @@ def login_screen() -> None:
     st.markdown(
         """
         <style>
-        .block-container{max-width:95vw;padding-top:1.2rem;padding-bottom:1.2rem}
+        .block-container{max-width:1250px;padding-top:1.2rem;padding-bottom:1.2rem}
         header[data-testid="stHeader"]{background:transparent}
         [data-testid="stAppViewContainer"]{background:radial-gradient(circle at 8% 8%,rgba(20,184,166,.13),transparent 30%),radial-gradient(circle at 92% 90%,rgba(56,189,248,.11),transparent 30%),linear-gradient(145deg,#f8fafc,#eef7f7 50%,#f8fafc)}
         #MainMenu,footer{visibility:hidden}
         .fs-head{text-align:center;margin-bottom:1.35rem}
         .fs-logo{width:70px;height:70px;margin:0 auto .75rem;display:flex;align-items:center;justify-content:center;border-radius:22px;background:linear-gradient(145deg,#0f172a,#164e63 52%,#0f766e);color:#fff;font-size:1.18rem;font-weight:850;box-shadow:0 16px 38px rgba(15,23,42,.23)}
         .fs-kicker{display:inline-block;padding:.32rem .85rem;border:1px solid #c5e8e3;border-radius:999px;background:#ecfdf5;color:#0f766e;font-size:.68rem;font-weight:780;letter-spacing:.12em;text-transform:uppercase}
-        .fs-title{margin:.55rem 0 0;color:#0f172a;font-size:3.6rem;font-weight:880;letter-spacing:-.055em;line-height:1}
+        .fs-title{margin:.55rem 0 0;color:#0f172a;font-size:3.2rem;font-weight:880;letter-spacing:-.055em;line-height:1}
         .fs-accent{background:linear-gradient(90deg,#0f766e,#0891b2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-        .fs-desc{margin-top:.62rem;color:#334155;font-size:1.25rem;font-weight:700}
-        .fs-motto{margin-top:.42rem;color:#0f766e;font-size:1rem;font-weight:760;letter-spacing:.09em;text-transform:uppercase}
+        .fs-desc{margin-top:.62rem;color:#334155;font-size:1.18rem;font-weight:700}
+        .fs-motto{margin-top:.42rem;color:#0f766e;font-size:.95rem;font-weight:760;letter-spacing:.09em;text-transform:uppercase}
         .fs-line{width:104px;height:3px;margin:.78rem auto 0;border-radius:999px;background:linear-gradient(90deg,#14b8a6,#38bdf8)}
-        .hero{min-height:490px;padding:2rem;border-radius:25px;background:radial-gradient(circle at 88% 10%,rgba(34,211,238,.30),transparent 30%),radial-gradient(circle at 10% 94%,rgba(45,212,191,.23),transparent 35%),linear-gradient(145deg,#0f172a,#123b4a 46%,#0f766e);box-shadow:0 25px 58px rgba(15,23,42,.24);color:#fff}
+        .hero{min-height:490px;padding:1.7rem;border-radius:25px;background:radial-gradient(circle at 88% 10%,rgba(34,211,238,.30),transparent 30%),radial-gradient(circle at 10% 94%,rgba(45,212,191,.23),transparent 35%),linear-gradient(145deg,#0f172a,#123b4a 46%,#0f766e);box-shadow:0 25px 58px rgba(15,23,42,.24);color:#fff}
         .hero-label{color:#99f6e4;font-size:.69rem;font-weight:780;letter-spacing:.13em;text-transform:uppercase}
-        .hero-title{margin:.7rem 0;color:#fff;font-size:2.2rem;font-weight:800;line-height:1.22}
-        .hero-copy{color:#d7eeee;font-size:1.05rem;line-height:1.62;margin-bottom:1rem}
-        .hero-callout{padding:.85rem .95rem;margin-bottom:1rem;border:1px solid rgba(255,255,255,.15);border-radius:14px;background:rgba(255,255,255,.08);color:#f8fafc;font-size:.82rem;line-height:1.5}
+        .hero-title{margin:.7rem 0;color:#fff;font-size:2rem;font-weight:800;line-height:1.22}
+        .hero-copy{color:#d7eeee;font-size:1rem;line-height:1.62;margin-bottom:1rem}
+        .hero-callout{padding:.85rem .95rem;margin-bottom:1rem;border:1px solid rgba(255,255,255,.15);border-radius:14px;background:rgba(255,255,255,.08);color:#f8fafc;font-size:.95rem;line-height:1.5}
         .hero-callout strong{color:#99f6e4}
         .cap{display:flex;gap:.72rem;align-items:flex-start;padding:.66rem .78rem;margin-bottom:.55rem;border:1px solid rgba(255,255,255,.13);border-radius:13px;background:rgba(255,255,255,.075)}
         .cap-num{min-width:35px;height:35px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(255,255,255,.10);color:#99f6e4;font-size:.72rem;font-weight:820}
-        .cap-title{color:#fff;font-size:1rem;font-weight:760}.cap-text{color:#cbe4e3;font-size:.70rem;line-height:1.4}
+        .cap-title{color:#fff;font-size:.96rem;font-weight:760}.cap-text{color:#cbe4e3;font-size:.82rem;line-height:1.4}
         .cap-ai{border-color:rgba(56,189,248,.33);background:linear-gradient(90deg,rgba(8,145,178,.20),rgba(20,184,166,.11))}
         .login-label{color:#0f766e;font-size:.69rem;font-weight:780;letter-spacing:.11em;text-transform:uppercase}
-        .login-title{margin:.28rem 0;color:#0f172a;font-size:2.5rem;font-weight:840}
-        .login-copy{color:#64748b;font-size:1.02rem;line-height:1.55;margin-bottom:1rem}
+        .login-title{margin:.28rem 0;color:#0f172a;font-size:2.1rem;font-weight:840}
+        .login-copy{color:#64748b;font-size:.98rem;line-height:1.55;margin-bottom:1rem}
         div[data-testid="stForm"]{padding:2rem;border:1px solid rgba(203,213,225,.76);border-radius:19px;background:rgba(255,255,255,.94);box-shadow:0 20px 46px rgba(15,23,42,.09)}
         div[data-baseweb="input"]{border-radius:11px} div[data-baseweb="input"] input{min-height:2.72rem}
         .stFormSubmitButton>button{min-height:3rem;border:0;border-radius:11px;background:linear-gradient(90deg,#0f766e,#0891b2);color:#fff;font-weight:750;box-shadow:0 11px 26px rgba(8,145,178,.23)}

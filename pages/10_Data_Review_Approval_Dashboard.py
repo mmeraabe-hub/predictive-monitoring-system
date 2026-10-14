@@ -9,6 +9,15 @@ from auth import require_login
 
 current_user = require_login("itt.review")
 
+user_roles = set(current_user.get("roles", []))
+
+is_admin = "Admin" in user_roles
+is_reviewer = "Reviewer" in user_roles
+is_approver = "Approver" in user_roles
+
+can_review = is_admin or is_reviewer
+can_approve = is_admin or is_approver
+
 from utils.database_utils import DB_FILE
 from utils.approved_itt_etl_clean import process_approved_batch
 from utils.retraining_engine import run_retraining_pipeline
@@ -38,7 +47,20 @@ st.caption(
     "filter records, inspect data-quality issues, and approve "
     "the dataset before ETL."
 )
-
+if is_admin:
+    st.info(
+        "Administrator access: review and approval controls are available."
+    )
+elif is_reviewer:
+    st.info(
+        "Reviewer workspace: review controls are available. "
+        "Final approval controls are restricted."
+    )
+elif is_approver:
+    st.info(
+        "Approver workspace: final approval controls are available. "
+        "Reviewer decision controls are hidden."
+    )
 
 st.info(
     """
@@ -3290,6 +3312,7 @@ else:
             type="primary",
             disabled=(
                 save_changes_disabled
+                or not can_review
             ),
             key=(
                 "dashboard10_"
@@ -3822,39 +3845,50 @@ else:
     )
 
 
+    approval_disabled = not (
+        approved_by.strip()
+        and review_confirmation
+        and unresolved_issue_confirmation
+    )
+
     approve_button = st.button(
         "Approve Selected Dataset",
         type="primary",
-        disabled=approval_disabled,
+        disabled=(
+            approval_disabled
+            or not can_approve
+        ),
         key="approve_selected_batch"
     )
+
     if approve_button:
 
         try:
 
             update_batch_approval(
                 upload_batch_id=(
-                selected_batch_id
-            ),
-            file_name=str(
-                selected_batch[
-                    "FileName"
-                ]
-            ),
-            previous_status=(
-                current_status
-            ),
-            approved_by=(
-                approved_by.strip()
-            ),
-            review_notes=(
-                review_notes.strip()
-            ),
-            reviewed_rows=len(
-                quality_itt
-            ),
-            issue_rows=issue_rows
-        )
+                    selected_batch_id
+                ),
+                file_name=str(
+                    selected_batch[
+                        "FileName"
+                    ]
+                ),
+                previous_status=(
+                    current_status
+                ),
+                approved_by=(
+                    approved_by.strip()
+                ),
+                review_notes=(
+                    review_notes.strip()
+                ),
+                reviewed_rows=len(
+                    quality_itt
+                ),
+                issue_rows=issue_rows
+            )
+
             etl_result = process_approved_batch(
                 upload_batch_id=selected_batch_id,
                 db_path=DB_FILE,
