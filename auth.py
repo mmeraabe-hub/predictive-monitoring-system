@@ -479,21 +479,10 @@ def login_screen() -> None:
             password = st.text_input("Password", type="password", placeholder="Enter your password", max_chars=128)
             submitted = st.form_submit_button("Access workspace", type="primary", use_container_width=True)
 
-    st.markdown(
-        """
-        <div style="
-            text-align:center;
-            margin-top:8px;
-            font-size:0.9rem;
-        ">
-            <a href="mailto:meron.abebe@crs.org?subject=FORESIGHT360 Password Reset Request">
-                Forgot Password? Contact System Administrator
-            </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-  
+<div class="support">
+    <strong>Forgot Password?</strong><br>
+    Contact the System Administrator for password reset assistance.
+</div>
 
 def _forced_password_change() -> None:
     st.warning("You must change your temporary password before continuing.")
