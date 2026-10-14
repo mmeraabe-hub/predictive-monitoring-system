@@ -507,7 +507,7 @@ def login_screen() -> None:
             margin-top:8px;
             font-size:0.9rem;
         ">
-            <a href="mailto:your.meron.abebe@crs.org?subject=FORESIGHT360 Password Reset Request">
+            <a href="mailto:meron.abebe@crs.org?subject=FORESIGHT360 Password Reset Request">
                 Forgot Password?
             </a>
         </div>
