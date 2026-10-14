@@ -479,27 +479,6 @@ def login_screen() -> None:
             password = st.text_input("Password", type="password", placeholder="Enter your password", max_chars=128)
             submitted = st.form_submit_button("Access workspace", type="primary", use_container_width=True)
 
-        st.markdown(
-            """
-            <div class="security"><strong>Secure organizational access</strong><br>Sign-in activity and protected workflow actions may be recorded to support security, accountability, and audit requirements.</div>
-            <div class="support">Need account support?<br>Contact the designated system administrator.</div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        if submitted:
-            if not username.strip() or not password:
-                st.warning("Enter both your username and password.")
-            else:
-                user = authenticate(username, password)
-                if user:
-                    establish_session(user)
-                    st.rerun()
-
-                st.error(
-                    "Sign-in failed. Check your credentials or contact the system administrator."
-                )
-
     st.markdown(
         """
         <div style="
@@ -512,11 +491,6 @@ def login_screen() -> None:
             </a>
         </div>
         """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        """<div class="fs-footer">FORESIGHT360 · Predictive Monitoring and Learning Platform<br>Secure access for authorized organizational users</div>""",
         unsafe_allow_html=True,
     )
   
