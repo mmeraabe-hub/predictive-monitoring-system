@@ -500,15 +500,26 @@ def login_screen() -> None:
                     "Sign-in failed. Check your credentials or contact the system administrator."
                 )
 
-    st.info(
-        "Forgot Password? Please contact the System Administrator to reset your password."
+    st.markdown(
+        """
+        <div style="
+            text-align:center;
+            margin-top:8px;
+            font-size:0.9rem;
+        ">
+            <a href="mailto:your.meron.abebe@crs.org?subject=FORESIGHT360 Password Reset Request">
+                Forgot Password?
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     st.markdown(
         """<div class="fs-footer">FORESIGHT360 · Predictive Monitoring and Learning Platform<br>Secure access for authorized organizational users</div>""",
         unsafe_allow_html=True,
     )
-
+  
 
 def _forced_password_change() -> None:
     st.warning("You must change your temporary password before continuing.")
