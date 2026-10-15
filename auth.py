@@ -478,7 +478,24 @@ def login_screen() -> None:
             username = st.text_input("Username", placeholder="Enter your username", max_chars=50)
             password = st.text_input("Password", type="password", placeholder="Enter your password", max_chars=128)
             submitted = st.form_submit_button("Access workspace", type="primary", use_container_width=True)
+        if submitted:
+            if not username.strip() or not password:
+                st.warning(
+                    "Enter both your username and password."
+                )
+            else:
+                user = authenticate(
+                    username,
+                    password
+                )
 
+                if user:
+                    establish_session(user)
+                    st.rerun()
+
+                st.error(
+                    "Sign-in failed. Check your credentials or contact the system administrator."
+                )
 
 def _forced_password_change() -> None:
     st.warning("You must change your temporary password before continuing.")
