@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import sqlite3
+import hashlib
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -513,6 +514,8 @@ def login_screen() -> None:
 
     st.write("DB:", DB_PATH)
     st.write("PEPPER LENGTH:", len(PEPPER))
+
+   
   
     st.markdown(
         """
