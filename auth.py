@@ -5,7 +5,6 @@ import os
 import re
 import secrets
 import sqlite3
-import hashlib
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -270,7 +269,6 @@ def authenticate(username: str, password: str) -> dict | None:
             (username,)
         ).fetchone()
 
- 
         if not user:
             try:
                 PASSWORD_HASHER.hash(_password_material(password))
@@ -297,17 +295,10 @@ def authenticate(username: str, password: str) -> dict | None:
 
             return None
 
-        password_ok = verify_password(
+        if not user["IsActive"] or not verify_password(
             user["PasswordHash"],
             password
-        )
-
-        st.write("PASSWORD ENTERED:", password)
-        st.write("PASSWORD MATERIAL:", password + PEPPER)
-        st.write("PASSWORD VALID:", password_ok)
-   
-
-        if not user["IsActive"] or not password_ok:
+        ):
 
             failed = int(user["FailedAttempts"]) + 1
 
@@ -495,35 +486,12 @@ def change_own_password(current_password: str, new_password: str) -> None:
     st.session_state.auth["must_change_password"] = False
     audit("PASSWORD_CHANGED", "User changed own password", auth["user_id"], auth["username"])
 
+
 def login_screen() -> None:
     initialize_auth_schema()
     bootstrap_admin_from_environment()
 
-    with db_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT PasswordHash
-            FROM auth_users
-            WHERE Username='admin'
-            """
-        ).fetchone()
 
-    if row:
-        import hashlib
-
-        st.write("HASH LENGTH:", len(row["PasswordHash"]))
-
-        st.write(
-            "HASH FINGERPRINT:",
-            hashlib.sha256(
-                row["PasswordHash"].encode("utf-8")
-            ).hexdigest()
-        )
-
-    st.write("DB:", DB_PATH)
-    st.write("PEPPER LENGTH:", len(PEPPER))
-  
-  
     st.markdown(
         """
         <style>
