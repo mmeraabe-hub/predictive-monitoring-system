@@ -392,6 +392,8 @@ def login_screen() -> None:
     bootstrap_admin_from_environment()
 
     st.info(f"Database Path: {DB_PATH}")
+    st.info(f"Pepper Loaded: {'Yes' if PEPPER else 'No'}")
+
 
     st.markdown(
         """
