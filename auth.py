@@ -259,165 +259,56 @@ def create_user(username: str, full_name: str, email: str | None, password: str,
 def authenticate(username: str, password: str) -> dict | None:
     initialize_auth_schema()
     username = username.strip()
-
-    st.write("LOGIN ATTEMPT:", username)
-
     now = utc_now()
-
     with db_connection() as conn:
-
-        user = conn.execute(
-            "SELECT * FROM auth_users WHERE Username = ? COLLATE NOCASE",
-            (username,)
-        ).fetchone()
-
-        st.write("USER FOUND:", user is not None)
-
+        user = conn.execute("SELECT * FROM auth_users WHERE Username = ? COLLATE NOCASE", (username,)).fetchone()
+        # Similar work on unavailable users reduces obvious account-enumeration timing differences.
         if not user:
-            st.error("USER NOT FOUND")
-
             try:
                 PASSWORD_HASHER.hash(_password_material(password))
             except Exception:
                 pass
-
-            audit(
-                "LOGIN_FAILED",
-                "Unknown username",
-                username=username
-            )
-
+            audit("LOGIN_FAILED", "Unknown username", username=username)
             return None
-
         locked_until = from_iso(user["LockedUntilUTC"])
-
-        # TEMPORARILY BYPASS LOCKOUT FOR TESTING
         if locked_until and locked_until > now:
-            st.warning(
-                "ACCOUNT WOULD BE LOCKED - BYPASSED FOR TESTING"
-            )
-
-        password_ok = verify_password(
-            user["PasswordHash"],
-            password
-        )
-
-        st.write(
-            "PASSWORD VALID =",
-            password_ok
-        )
-
-        if not user["IsActive"] or not password_ok:
-
-            failed = int(user["FailedAttempts"]) + 1
-
-            new_lock = (
-                now + timedelta(minutes=LOCKOUT_MINUTES)
-                if failed >= MAX_FAILED_ATTEMPTS
-                else None
-            )
-
-            conn.execute(
-                """
-                UPDATE auth_users
-                SET FailedAttempts=?,
-                    LockedUntilUTC=?,
-                    UpdatedUTC=?
-                WHERE UserID=?
-                """,
-                (
-                    0 if new_lock else failed,
-                    to_iso(new_lock),
-                    to_iso(now),
-                    user["UserID"],
-                ),
-            )
-
-            audit(
-                "LOGIN_FAILED",
-                "Invalid credentials or inactive account",
-                user["UserID"],
-                user["Username"],
-            )
-
+            audit("LOGIN_BLOCKED", "Account temporarily locked", user["UserID"], user["Username"])
             return None
-
-        if PASSWORD_HASHER.check_needs_rehash(
-            user["PasswordHash"]
-        ):
+        if not user["IsActive"] or not verify_password(user["PasswordHash"], password):
+            failed = int(user["FailedAttempts"]) + 1
+            new_lock = now + timedelta(minutes=LOCKOUT_MINUTES) if failed >= MAX_FAILED_ATTEMPTS else None
             conn.execute(
-                """
-                UPDATE auth_users
-                SET PasswordHash=?,
-                    UpdatedUTC=?
-                WHERE UserID=?
-                """,
-                (
-                    hash_password(password),
-                    to_iso(now),
-                    user["UserID"],
-                ),
+                "UPDATE auth_users SET FailedAttempts=?, LockedUntilUTC=?, UpdatedUTC=? WHERE UserID=?",
+                (0 if new_lock else failed, to_iso(new_lock), to_iso(now), user["UserID"]),
             )
-
+            audit("LOGIN_FAILED", "Invalid credentials or inactive account", user["UserID"], user["Username"])
+            return None
+        if PASSWORD_HASHER.check_needs_rehash(user["PasswordHash"]):
+            conn.execute(
+                "UPDATE auth_users SET PasswordHash=?, UpdatedUTC=? WHERE UserID=?",
+                (hash_password(password), to_iso(now), user["UserID"]),
+            )
         conn.execute(
-            """
-            UPDATE auth_users
-            SET FailedAttempts=0,
-                LockedUntilUTC=NULL,
-                LastLoginUTC=?,
-                UpdatedUTC=?
-            WHERE UserID=?
-            """,
-            (
-                to_iso(now),
-                to_iso(now),
-                user["UserID"],
-            ),
+            "UPDATE auth_users SET FailedAttempts=0, LockedUntilUTC=NULL, LastLoginUTC=?, UpdatedUTC=? WHERE UserID=?",
+            (to_iso(now), to_iso(now), user["UserID"]),
         )
-
-        roles = [
-            r["RoleName"]
-            for r in conn.execute(
-                """
-                SELECT r.RoleName
-                FROM auth_roles r
-                JOIN auth_user_roles ur
-                    ON ur.RoleID = r.RoleID
-                WHERE ur.UserID=?
-                ORDER BY r.RoleName
-                """,
-                (user["UserID"],),
-            )
-        ]
-
-        permissions = [
-            p["PermissionCode"]
-            for p in conn.execute(
-                """
-                SELECT DISTINCT p.PermissionCode
-                FROM auth_permissions p
-                JOIN auth_role_permissions rp
-                    ON rp.PermissionID = p.PermissionID
-                JOIN auth_user_roles ur
-                    ON ur.RoleID = rp.RoleID
-                WHERE ur.UserID=?
-                """,
-                (user["UserID"],),
-            )
-        ]
-
+        roles = [r["RoleName"] for r in conn.execute(
+            """SELECT r.RoleName FROM auth_roles r
+               JOIN auth_user_roles ur ON ur.RoleID=r.RoleID WHERE ur.UserID=? ORDER BY r.RoleName""",
+            (user["UserID"],),
+        )]
+        permissions = [p["PermissionCode"] for p in conn.execute(
+            """SELECT DISTINCT p.PermissionCode FROM auth_permissions p
+               JOIN auth_role_permissions rp ON rp.PermissionID=p.PermissionID
+               JOIN auth_user_roles ur ON ur.RoleID=rp.RoleID WHERE ur.UserID=?""",
+            (user["UserID"],),
+        )]
         result = dict(user)
         result["Roles"] = roles
         result["Permissions"] = permissions
-
-    audit(
-        "LOGIN_SUCCESS",
-        "Successful sign-in",
-        result["UserID"],
-        result["Username"],
-    )
-
+    audit("LOGIN_SUCCESS", "Successful sign-in", result["UserID"], result["Username"])
     return result
+
 
 def establish_session(user: dict) -> None:
     now = utc_now()
@@ -499,67 +390,6 @@ def change_own_password(current_password: str, new_password: str) -> None:
 def login_screen() -> None:
     initialize_auth_schema()
     bootstrap_admin_from_environment()
-
-st.info(f"Database Path: {DB_PATH}")
-st.info(f"Pepper Loaded: {'Yes' if PEPPER else 'No'}")
-
-if st.button("REBUILD USERS"):
-
-    with db_connection() as conn:
-        conn.execute("DELETE FROM auth_user_roles")
-        conn.execute("DELETE FROM auth_users")
-
-    create_user(
-        "admin",
-        "System Administrator",
-        "admin@example.com",
-        "AdminSecure@2026!",
-        ["Admin"],
-        None,
-        must_change_password=False,
-    )
-
-    create_user(
-        "dataentry",
-        "Data Entry User",
-        "dataentry@example.com",
-        "DataEntry@2026!",
-        ["Data Entry"],
-        None,
-        must_change_password=False,
-    )
-
-    create_user(
-        "reviewer",
-        "Reviewer User",
-        "reviewer@example.com",
-        "Reviewer@2026!",
-        ["Reviewer"],
-        None,
-        must_change_password=False,
-    )
-
-    create_user(
-        "approver",
-        "Approver User",
-        "approver@example.com",
-        "Approver@2026!",
-        ["Approver"],
-        None,
-        must_change_password=False,
-    )
-
-    create_user(
-        "manager",
-        "Manager User",
-        "manager@example.com",
-        "Manager@2026!",
-        ["Management"],
-        None,
-        must_change_password=False,
-    )
-
-    st.success("Users rebuilt successfully")
 
     st.markdown(
         """
