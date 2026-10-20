@@ -492,7 +492,7 @@ def login_screen() -> None:
     bootstrap_admin_from_environment()
 
     st.write("DB:", DB_PATH)
-
+    st.write("PEPPER LENGTH:", len(PEPPER))
     st.markdown(
         """
         <style>
