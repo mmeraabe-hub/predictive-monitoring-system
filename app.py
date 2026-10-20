@@ -1,12 +1,11 @@
 import streamlit as st
 
 from auth import (
-    initialize_auth_schema,
     bootstrap_admin_from_environment,
 )
 
-initialize_auth_schema()
 bootstrap_admin_from_environment()
+
 
 from auth import (
     clear_session,
@@ -169,6 +168,8 @@ if not session_is_valid():
 
 user = current_user()
 roles = set(user.get("roles", []))
+
+
 
 
 # ============================================================
