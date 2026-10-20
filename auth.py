@@ -489,6 +489,8 @@ def login_screen() -> None:
                     password
                 )
 
+               
+
                 if user:
                     establish_session(user)
                     st.rerun()
