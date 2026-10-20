@@ -269,6 +269,7 @@ def authenticate(username: str, password: str) -> dict | None:
             (username,)
         ).fetchone()
 
+ 
         if not user:
             try:
                 PASSWORD_HASHER.hash(_password_material(password))
@@ -295,10 +296,15 @@ def authenticate(username: str, password: str) -> dict | None:
 
             return None
 
-        if not user["IsActive"] or not verify_password(
+        password_ok = verify_password(
             user["PasswordHash"],
             password
-        ):
+        )
+
+        st.write("PASSWORD ENTERED:", password)
+        st.write("PASSWORD VALID:", password_ok)
+
+        if not user["IsActive"] or not password_ok:
 
             failed = int(user["FailedAttempts"]) + 1
 
