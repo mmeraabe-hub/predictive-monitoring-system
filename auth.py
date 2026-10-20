@@ -503,43 +503,63 @@ def login_screen() -> None:
 st.info(f"Database Path: {DB_PATH}")
 st.info(f"Pepper Loaded: {'Yes' if PEPPER else 'No'}")
 
-if st.button("RESET ADMIN PASSWORD"):
-    with db_connection() as conn:
-        conn.execute(
-            """
-            UPDATE auth_users
-            SET PasswordHash=?,
-                FailedAttempts=0,
-                LockedUntilUTC=NULL
-            WHERE Username='admin'
-            """,
-            (
-                hash_password("AdminSecure@2026!"),
-            ),
-        )
+if st.button("REBUILD USERS"):
 
-    st.success("Admin password reset")
-    st.write("BOOTSTRAP USER:", os.getenv("APP_BOOTSTRAP_ADMIN_USERNAME"))
-    st.write("BOOTSTRAP PASSWORD:", os.getenv("APP_BOOTSTRAP_ADMIN_PASSWORD"))
     with db_connection() as conn:
-        users = conn.execute(
-            """
-            SELECT
-                Username,
-                substr(PasswordHash,1,60) AS HashPreview,
-                IsActive,
-                FailedAttempts,
-                LockedUntilUTC
-            FROM auth_users
-            """
-        ).fetchall()
+        conn.execute("DELETE FROM auth_user_roles")
+        conn.execute("DELETE FROM auth_users")
 
-    st.write(
-        [
-            dict(row)
-            for row in users
-        ]
+    create_user(
+        "admin",
+        "System Administrator",
+        "admin@example.com",
+        "AdminSecure@2026!",
+        ["Admin"],
+        None,
+        must_change_password=False,
     )
+
+    create_user(
+        "dataentry",
+        "Data Entry User",
+        "dataentry@example.com",
+        "DataEntry@2026!",
+        ["Data Entry"],
+        None,
+        must_change_password=False,
+    )
+
+    create_user(
+        "reviewer",
+        "Reviewer User",
+        "reviewer@example.com",
+        "Reviewer@2026!",
+        ["Reviewer"],
+        None,
+        must_change_password=False,
+    )
+
+    create_user(
+        "approver",
+        "Approver User",
+        "approver@example.com",
+        "Approver@2026!",
+        ["Approver"],
+        None,
+        must_change_password=False,
+    )
+
+    create_user(
+        "manager",
+        "Manager User",
+        "manager@example.com",
+        "Manager@2026!",
+        ["Management"],
+        None,
+        must_change_password=False,
+    )
+
+    st.success("Users rebuilt successfully")
 
     st.markdown(
         """
