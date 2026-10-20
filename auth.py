@@ -259,57 +259,156 @@ def create_user(username: str, full_name: str, email: str | None, password: str,
 def authenticate(username: str, password: str) -> dict | None:
     initialize_auth_schema()
     username = username.strip()
+
     now = utc_now()
+
     with db_connection() as conn:
-        user = conn.execute("SELECT * FROM auth_users WHERE Username = ? COLLATE NOCASE", (username,)).fetchone()
-        # Similar work on unavailable users reduces obvious account-enumeration timing differences.
+
+        user = conn.execute(
+            "SELECT * FROM auth_users WHERE Username = ? COLLATE NOCASE",
+            (username,)
+        ).fetchone()
+
         if not user:
             try:
                 PASSWORD_HASHER.hash(_password_material(password))
             except Exception:
                 pass
-            audit("LOGIN_FAILED", "Unknown username", username=username)
+
+            audit(
+                "LOGIN_FAILED",
+                "Unknown username",
+                username=username
+            )
+
             return None
+
         locked_until = from_iso(user["LockedUntilUTC"])
+
         if locked_until and locked_until > now:
-            audit("LOGIN_BLOCKED", "Account temporarily locked", user["UserID"], user["Username"])
+            audit(
+                "LOGIN_BLOCKED",
+                "Account temporarily locked",
+                user["UserID"],
+                user["Username"],
+            )
+
             return None
-        if not user["IsActive"] or not verify_password(user["PasswordHash"], password):
+
+        if not user["IsActive"] or not verify_password(
+            user["PasswordHash"],
+            password
+        ):
+
             failed = int(user["FailedAttempts"]) + 1
-            new_lock = now + timedelta(minutes=LOCKOUT_MINUTES) if failed >= MAX_FAILED_ATTEMPTS else None
-            conn.execute(
-                "UPDATE auth_users SET FailedAttempts=?, LockedUntilUTC=?, UpdatedUTC=? WHERE UserID=?",
-                (0 if new_lock else failed, to_iso(new_lock), to_iso(now), user["UserID"]),
+
+            new_lock = (
+                now + timedelta(minutes=LOCKOUT_MINUTES)
+                if failed >= MAX_FAILED_ATTEMPTS
+                else None
             )
-            audit("LOGIN_FAILED", "Invalid credentials or inactive account", user["UserID"], user["Username"])
+
+            conn.execute(
+                """
+                UPDATE auth_users
+                SET FailedAttempts=?,
+                    LockedUntilUTC=?,
+                    UpdatedUTC=?
+                WHERE UserID=?
+                """,
+                (
+                    0 if new_lock else failed,
+                    to_iso(new_lock),
+                    to_iso(now),
+                    user["UserID"],
+                ),
+            )
+
+            audit(
+                "LOGIN_FAILED",
+                "Invalid credentials or inactive account",
+                user["UserID"],
+                user["Username"],
+            )
+
             return None
-        if PASSWORD_HASHER.check_needs_rehash(user["PasswordHash"]):
+
+        if PASSWORD_HASHER.check_needs_rehash(
+            user["PasswordHash"]
+        ):
             conn.execute(
-                "UPDATE auth_users SET PasswordHash=?, UpdatedUTC=? WHERE UserID=?",
-                (hash_password(password), to_iso(now), user["UserID"]),
+                """
+                UPDATE auth_users
+                SET PasswordHash=?,
+                    UpdatedUTC=?
+                WHERE UserID=?
+                """,
+                (
+                    hash_password(password),
+                    to_iso(now),
+                    user["UserID"],
+                ),
             )
+
         conn.execute(
-            "UPDATE auth_users SET FailedAttempts=0, LockedUntilUTC=NULL, LastLoginUTC=?, UpdatedUTC=? WHERE UserID=?",
-            (to_iso(now), to_iso(now), user["UserID"]),
+            """
+            UPDATE auth_users
+            SET FailedAttempts=0,
+                LockedUntilUTC=NULL,
+                LastLoginUTC=?,
+                UpdatedUTC=?
+            WHERE UserID=?
+            """,
+            (
+                to_iso(now),
+                to_iso(now),
+                user["UserID"],
+            ),
         )
-        roles = [r["RoleName"] for r in conn.execute(
-            """SELECT r.RoleName FROM auth_roles r
-               JOIN auth_user_roles ur ON ur.RoleID=r.RoleID WHERE ur.UserID=? ORDER BY r.RoleName""",
-            (user["UserID"],),
-        )]
-        permissions = [p["PermissionCode"] for p in conn.execute(
-            """SELECT DISTINCT p.PermissionCode FROM auth_permissions p
-               JOIN auth_role_permissions rp ON rp.PermissionID=p.PermissionID
-               JOIN auth_user_roles ur ON ur.RoleID=rp.RoleID WHERE ur.UserID=?""",
-            (user["UserID"],),
-        )]
+
+        roles = [
+            r["RoleName"]
+            for r in conn.execute(
+                """
+                SELECT r.RoleName
+                FROM auth_roles r
+                JOIN auth_user_roles ur
+                    ON ur.RoleID = r.RoleID
+                WHERE ur.UserID=?
+                ORDER BY r.RoleName
+                """,
+                (user["UserID"],),
+            )
+        ]
+
+        permissions = [
+            p["PermissionCode"]
+            for p in conn.execute(
+                """
+                SELECT DISTINCT p.PermissionCode
+                FROM auth_permissions p
+                JOIN auth_role_permissions rp
+                    ON rp.PermissionID = p.PermissionID
+                JOIN auth_user_roles ur
+                    ON ur.RoleID = rp.RoleID
+                WHERE ur.UserID=?
+                """,
+                (user["UserID"],),
+            )
+        ]
+
         result = dict(user)
         result["Roles"] = roles
         result["Permissions"] = permissions
-    audit("LOGIN_SUCCESS", "Successful sign-in", result["UserID"], result["Username"])
+
+    audit(
+        "LOGIN_SUCCESS",
+        "Successful sign-in",
+        result["UserID"],
+        result["Username"],
+    )
+
     return result
-
-
 def establish_session(user: dict) -> None:
     now = utc_now()
     st.session_state.auth = {
@@ -390,6 +489,7 @@ def change_own_password(current_password: str, new_password: str) -> None:
 def login_screen() -> None:
     initialize_auth_schema()
     bootstrap_admin_from_environment()
+
 
     st.markdown(
         """
