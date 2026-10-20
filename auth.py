@@ -491,8 +491,21 @@ def login_screen() -> None:
     initialize_auth_schema()
     bootstrap_admin_from_environment()
 
+    with db_connection() as conn:
+        users = conn.execute(
+            """
+            SELECT Username,
+                   FailedAttempts,
+                   LockedUntilUTC
+            FROM auth_users
+            """
+        ).fetchall()
+
+    st.write([dict(row) for row in users])
+
     st.write("DB:", DB_PATH)
     st.write("PEPPER LENGTH:", len(PEPPER))
+  
     st.markdown(
         """
         <style>
