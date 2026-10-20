@@ -280,42 +280,52 @@ def authenticate(username: str, password: str) -> dict | None:
             audit("LOGIN_BLOCKED", "Account temporarily locked", user["UserID"], user["Username"])
                   
             return None
-        if not user["IsActive"] or not verify_password(user["PasswordHash"], password):
-            st.error("PASSWORD CHECK FAILED")
-            failed = int(user["FailedAttempts"]) + 1
-            new_lock = now + timedelta(minutes=LOCKOUT_MINUTES) if failed >= MAX_FAILED_ATTEMPTS else None
-            conn.execute(
-                "UPDATE auth_users SET FailedAttempts=?, LockedUntilUTC=?, UpdatedUTC=? WHERE UserID=?",
-                (0 if new_lock else failed, to_iso(new_lock), to_iso(now), user["UserID"]),
-            )
-            audit("LOGIN_FAILED", "Invalid credentials or inactive account", user["UserID"], user["Username"])
-            return None
-        if PASSWORD_HASHER.check_needs_rehash(user["PasswordHash"]):
-            conn.execute(
-                "UPDATE auth_users SET PasswordHash=?, UpdatedUTC=? WHERE UserID=?",
-                (hash_password(password), to_iso(now), user["UserID"]),
-            )
-        conn.execute(
-            "UPDATE auth_users SET FailedAttempts=0, LockedUntilUTC=NULL, LastLoginUTC=?, UpdatedUTC=? WHERE UserID=?",
-            (to_iso(now), to_iso(now), user["UserID"]),
+        password_ok = verify_password(
+            user["PasswordHash"],
+            password
         )
-        roles = [r["RoleName"] for r in conn.execute(
-            """SELECT r.RoleName FROM auth_roles r
-               JOIN auth_user_roles ur ON ur.RoleID=r.RoleID WHERE ur.UserID=? ORDER BY r.RoleName""",
-            (user["UserID"],),
-        )]
-        permissions = [p["PermissionCode"] for p in conn.execute(
-            """SELECT DISTINCT p.PermissionCode FROM auth_permissions p
-               JOIN auth_role_permissions rp ON rp.PermissionID=p.PermissionID
-               JOIN auth_user_roles ur ON ur.RoleID=rp.RoleID WHERE ur.UserID=?""",
-            (user["UserID"],),
-        )]
-        result = dict(user)
-        result["Roles"] = roles
-        result["Permissions"] = permissions
-    audit("LOGIN_SUCCESS", "Successful sign-in", result["UserID"], result["Username"])
-    return result
 
+        st.write(
+            "PASSWORD VALID =",
+            password_ok
+        )
+
+        if not user["IsActive"] or not password_ok:
+            print("PASSWORD CHECK FAILED")
+
+            failed = int(user["FailedAttempts"]) + 1
+
+            new_lock = (
+                now + timedelta(minutes=LOCKOUT_MINUTES)
+                if failed >= MAX_FAILED_ATTEMPTS
+                else None
+            )
+
+            conn.execute(
+                """
+                UPDATE auth_users
+                SET FailedAttempts=?,
+                    LockedUntilUTC=?,
+                    UpdatedUTC=?
+                WHERE UserID=?
+                """,
+                (
+                    0 if new_lock else failed,
+                    to_iso(new_lock),
+                    to_iso(now),
+                    user["UserID"],
+                ),
+            )
+
+            audit(
+                "LOGIN_FAILED",
+                "Invalid credentials or inactive account",
+                user["UserID"],
+                user["Username"],
+            )
+
+            return None
+            
 
 def establish_session(user: dict) -> None:
     now = utc_now()
