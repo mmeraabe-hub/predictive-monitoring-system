@@ -278,7 +278,7 @@ def authenticate(username: str, password: str) -> dict | None:
         if locked_until and locked_until > now:
             print("ACCOUNT LOCKED")
             audit("LOGIN_BLOCKED", "Account temporarily locked", user["UserID"], user["Username"])
-            print("PASSWORD VERIFICATION FAILED")           
+                  
             return None
         if not user["IsActive"] or not verify_password(user["PasswordHash"], password):
             print("PASSWORD CHECK FAILED")
