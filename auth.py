@@ -413,7 +413,15 @@ def login_screen() -> None:
         ).fetchall()
 
     st.write("AUTH USERS")
-    st.write(users)
+
+    st.write(
+        [
+            dict(row)
+            for row in users
+        ]
+    )
+
+
 
 
     st.markdown(
