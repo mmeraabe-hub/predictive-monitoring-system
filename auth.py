@@ -302,7 +302,9 @@ def authenticate(username: str, password: str) -> dict | None:
         )
 
         st.write("PASSWORD ENTERED:", password)
+        st.write("PASSWORD MATERIAL:", password + PEPPER)
         st.write("PASSWORD VALID:", password_ok)
+   
 
         if not user["IsActive"] or not password_ok:
 
@@ -501,7 +503,7 @@ def login_screen() -> None:
         row = conn.execute(
             """
             SELECT Username,
-                   substr(PasswordHash,1,80) AS HashPreview
+                   length(PasswordHash) AS HashLength
             FROM auth_users
             WHERE Username='admin'
             """
