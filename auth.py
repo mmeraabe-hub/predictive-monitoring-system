@@ -410,11 +410,13 @@ def login_screen() -> None:
 
     st.info(f"Database Path: {DB_PATH}")
     st.info(f"Pepper Loaded: {'Yes' if PEPPER else 'No'}")
+
     with db_connection() as conn:
         users = conn.execute(
             """
             SELECT
                 Username,
+                substr(PasswordHash,1,60) AS HashPreview,
                 IsActive,
                 FailedAttempts,
                 LockedUntilUTC
@@ -422,17 +424,12 @@ def login_screen() -> None:
             """
         ).fetchall()
 
-    st.write("AUTH USERS")
-
     st.write(
         [
             dict(row)
             for row in users
         ]
     )
-
-
-
 
     st.markdown(
         """
