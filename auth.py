@@ -259,9 +259,12 @@ def create_user(username: str, full_name: str, email: str | None, password: str,
 def authenticate(username: str, password: str) -> dict | None:
     initialize_auth_schema()
     username = username.strip()
+
+    print(f"LOGIN ATTEMPT: {username}")
     now = utc_now()
     with db_connection() as conn:
         user = conn.execute("SELECT * FROM auth_users WHERE Username = ? COLLATE NOCASE", (username,)).fetchone()
+        print("USER FOUND:", user is not None)
         # Similar work on unavailable users reduces obvious account-enumeration timing differences.
         if not user:
             try:
@@ -270,9 +273,11 @@ def authenticate(username: str, password: str) -> dict | None:
                 pass
             audit("LOGIN_FAILED", "Unknown username", username=username)
             return None
+            print("USER NOT FOUND")
         locked_until = from_iso(user["LockedUntilUTC"])
         if locked_until and locked_until > now:
             audit("LOGIN_BLOCKED", "Account temporarily locked", user["UserID"], user["Username"])
+            print("PASSWORD VERIFICATION FAILED")           
             return None
         if not user["IsActive"] or not verify_password(user["PasswordHash"], password):
             failed = int(user["FailedAttempts"]) + 1
