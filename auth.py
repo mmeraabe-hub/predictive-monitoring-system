@@ -391,6 +391,8 @@ def login_screen() -> None:
     initialize_auth_schema()
     bootstrap_admin_from_environment()
 
+    st.info(f"Database Path: {DB_PATH}")
+
     st.markdown(
         """
         <style>
