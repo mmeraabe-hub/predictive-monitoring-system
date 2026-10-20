@@ -267,19 +267,21 @@ def authenticate(username: str, password: str) -> dict | None:
         print("USER FOUND:", user is not None)
         # Similar work on unavailable users reduces obvious account-enumeration timing differences.
         if not user:
+            print("USER NOT FOUND")
             try:
                 PASSWORD_HASHER.hash(_password_material(password))
             except Exception:
                 pass
             audit("LOGIN_FAILED", "Unknown username", username=username)
             return None
-            print("USER NOT FOUND")
         locked_until = from_iso(user["LockedUntilUTC"])
         if locked_until and locked_until > now:
+            print("ACCOUNT LOCKED")
             audit("LOGIN_BLOCKED", "Account temporarily locked", user["UserID"], user["Username"])
             print("PASSWORD VERIFICATION FAILED")           
             return None
         if not user["IsActive"] or not verify_password(user["PasswordHash"], password):
+            print("PASSWORD CHECK FAILED")
             failed = int(user["FailedAttempts"]) + 1
             new_lock = now + timedelta(minutes=LOCKOUT_MINUTES) if failed >= MAX_FAILED_ATTEMPTS else None
             conn.execute(
