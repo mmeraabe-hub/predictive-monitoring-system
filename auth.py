@@ -409,6 +409,7 @@ def authenticate(username: str, password: str) -> dict | None:
     )
 
     return result
+
 def establish_session(user: dict) -> None:
     now = utc_now()
     st.session_state.auth = {
