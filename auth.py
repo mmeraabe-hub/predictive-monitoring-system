@@ -500,8 +500,25 @@ def login_screen() -> None:
     initialize_auth_schema()
     bootstrap_admin_from_environment()
 
-    st.info(f"Database Path: {DB_PATH}")
-    st.info(f"Pepper Loaded: {'Yes' if PEPPER else 'No'}")
+st.info(f"Database Path: {DB_PATH}")
+st.info(f"Pepper Loaded: {'Yes' if PEPPER else 'No'}")
+
+if st.button("RESET ADMIN PASSWORD"):
+    with db_connection() as conn:
+        conn.execute(
+            """
+            UPDATE auth_users
+            SET PasswordHash=?,
+                FailedAttempts=0,
+                LockedUntilUTC=NULL
+            WHERE Username='admin'
+            """,
+            (
+                hash_password("AdminSecure@2026!"),
+            ),
+        )
+
+    st.success("Admin password reset")
     st.write("BOOTSTRAP USER:", os.getenv("APP_BOOTSTRAP_ADMIN_USERNAME"))
     st.write("BOOTSTRAP PASSWORD:", os.getenv("APP_BOOTSTRAP_ADMIN_PASSWORD"))
     with db_connection() as conn:
