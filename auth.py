@@ -492,16 +492,16 @@ def login_screen() -> None:
     bootstrap_admin_from_environment()
 
     with db_connection() as conn:
-        users = conn.execute(
+        row = conn.execute(
             """
             SELECT Username,
-                   FailedAttempts,
-                   LockedUntilUTC
+                   substr(PasswordHash,1,80) AS HashPreview
             FROM auth_users
+            WHERE Username='admin'
             """
-        ).fetchall()
+        ).fetchone()
 
-    st.write([dict(row) for row in users])
+    st.write(dict(row))
 
     st.write("DB:", DB_PATH)
     st.write("PEPPER LENGTH:", len(PEPPER))
