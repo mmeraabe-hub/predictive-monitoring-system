@@ -260,14 +260,14 @@ def authenticate(username: str, password: str) -> dict | None:
     initialize_auth_schema()
     username = username.strip()
 
-    print(f"LOGIN ATTEMPT: {username}")
+    st.write("LOGIN ATTEMPT:", username)
     now = utc_now()
     with db_connection() as conn:
         user = conn.execute("SELECT * FROM auth_users WHERE Username = ? COLLATE NOCASE", (username,)).fetchone()
-        print("USER FOUND:", user is not None)
+        st.write("USER FOUND:", user is not None)
         # Similar work on unavailable users reduces obvious account-enumeration timing differences.
         if not user:
-            print("USER NOT FOUND")
+            st.error("USER NOT FOUND")
             try:
                 PASSWORD_HASHER.hash(_password_material(password))
             except Exception:
@@ -276,12 +276,12 @@ def authenticate(username: str, password: str) -> dict | None:
             return None
         locked_until = from_iso(user["LockedUntilUTC"])
         if locked_until and locked_until > now:
-            print("ACCOUNT LOCKED")
+            st.error("ACCOUNT LOCKED")
             audit("LOGIN_BLOCKED", "Account temporarily locked", user["UserID"], user["Username"])
                   
             return None
         if not user["IsActive"] or not verify_password(user["PasswordHash"], password):
-            print("PASSWORD CHECK FAILED")
+            st.error("PASSWORD CHECK FAILED")
             failed = int(user["FailedAttempts"]) + 1
             new_lock = now + timedelta(minutes=LOCKOUT_MINUTES) if failed >= MAX_FAILED_ATTEMPTS else None
             conn.execute(
@@ -400,6 +400,20 @@ def login_screen() -> None:
 
     st.info(f"Database Path: {DB_PATH}")
     st.info(f"Pepper Loaded: {'Yes' if PEPPER else 'No'}")
+    with db_connection() as conn:
+        users = conn.execute(
+            """
+            SELECT
+                Username,
+                IsActive,
+                FailedAttempts,
+                LockedUntilUTC
+            FROM auth_users
+            """
+        ).fetchall()
+
+    st.write("AUTH USERS")
+    st.write(users)
 
 
     st.markdown(
