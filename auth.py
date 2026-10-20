@@ -495,7 +495,6 @@ def change_own_password(current_password: str, new_password: str) -> None:
     st.session_state.auth["must_change_password"] = False
     audit("PASSWORD_CHANGED", "User changed own password", auth["user_id"], auth["username"])
 
-
 def login_screen() -> None:
     initialize_auth_schema()
     bootstrap_admin_from_environment()
@@ -503,19 +502,27 @@ def login_screen() -> None:
     with db_connection() as conn:
         row = conn.execute(
             """
-            SELECT Username,
-                   length(PasswordHash) AS HashLength
+            SELECT PasswordHash
             FROM auth_users
             WHERE Username='admin'
             """
         ).fetchone()
 
-    st.write(dict(row))
+    if row:
+        import hashlib
+
+        st.write("HASH LENGTH:", len(row["PasswordHash"]))
+
+        st.write(
+            "HASH FINGERPRINT:",
+            hashlib.sha256(
+                row["PasswordHash"].encode("utf-8")
+            ).hexdigest()
+        )
 
     st.write("DB:", DB_PATH)
     st.write("PEPPER LENGTH:", len(PEPPER))
-
-   
+  
   
     st.markdown(
         """
