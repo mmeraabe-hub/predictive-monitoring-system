@@ -254,7 +254,87 @@ def create_user(username: str, full_name: str, email: str | None, password: str,
         )
     audit("USER_CREATED", f"Created user {username} with roles {', '.join(role_list)}", created_by)
     return user_id
+def reset_cloud_accounts_from_environment() -> bool:
+    reset_token = os.getenv(
+        "APP_ACCOUNT_RESET_TOKEN",
+        ""
+    ).strip()
 
+    if not reset_token:
+        return False
+
+    account_passwords = {
+        "admin": os.getenv("APP_RESET_ADMIN_PASSWORD"),
+        "dataentry": os.getenv("APP_RESET_DATAENTRY_PASSWORD"),
+        "reviewer": os.getenv("APP_RESET_REVIEWER_PASSWORD"),
+        "approver": os.getenv("APP_RESET_APPROVER_PASSWORD"),
+        "manager": os.getenv("APP_RESET_MANAGER_PASSWORD"),
+    }
+
+    with db_connection() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS auth_account_reset_history (
+                ResetToken TEXT PRIMARY KEY,
+                AppliedUTC TEXT NOT NULL
+            )
+            """
+        )
+
+        already_applied = conn.execute(
+            """
+            SELECT 1
+            FROM auth_account_reset_history
+            WHERE ResetToken = ?
+            """,
+            (reset_token,),
+        ).fetchone()
+
+        if already_applied:
+            return False
+
+        now = to_iso(utc_now())
+
+        for username, password in account_passwords.items():
+            if not password:
+                continue
+
+            password_hash = hash_password(password)
+
+            conn.execute(
+                """
+                UPDATE auth_users
+                SET
+                    PasswordHash = ?,
+                    IsActive = 1,
+                    MustChangePassword = 1,
+                    FailedAttempts = 0,
+                    LockedUntilUTC = NULL,
+                    UpdatedUTC = ?
+                WHERE Username = ? COLLATE NOCASE
+                """,
+                (
+                    password_hash,
+                    now,
+                    username,
+                ),
+            )
+
+        conn.execute(
+            """
+            INSERT INTO auth_account_reset_history(
+                ResetToken,
+                AppliedUTC
+            )
+            VALUES (?, ?)
+            """,
+            (
+                reset_token,
+                now,
+            ),
+        )
+
+    return True
 
 def authenticate(username: str, password: str) -> dict | None:
     initialize_auth_schema()
